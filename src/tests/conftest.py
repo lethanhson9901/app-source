@@ -1,20 +1,23 @@
-import pytest
-from fastapi.testclient import TestClient
-from typing import Generator
 import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import Generator
 
-# Add the project root directory to PYTHONPATH
+import pytest
+from fastapi.testclient import TestClient
+
+# Add the project root directory to PYTHONPATH before importing local modules
 project_root = str(Path(__file__).parent.parent.parent)
 sys.path.insert(0, project_root)
 
-from src.app.main import app
-from src.app.config import settings
+# Now we can import from our project
+from src.app.config import settings  # noqa: E402
+from src.app.main import app  # noqa: E402
 
 # Set test environment
 os.environ["ENVIRONMENT"] = "test"
+
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator:
@@ -23,10 +26,12 @@ def event_loop() -> Generator:
     yield loop
     loop.close()
 
+
 @pytest.fixture(scope="session")
 def test_app():
     """Create a test instance of the FastAPI application."""
     return app
+
 
 @pytest.fixture(scope="session")
 def client(test_app):
@@ -34,16 +39,18 @@ def client(test_app):
     with TestClient(test_app) as test_client:
         yield test_client
 
+
 @pytest.fixture(scope="session")
 def test_settings():
     """Provide test settings."""
     return settings
 
+
 @pytest.fixture(autouse=True)
 def setup_env():
     """Setup test environment variables before each test."""
     original_env = dict(os.environ)
-    
+
     # Set test-specific environment variables
     test_env = {
         "ENVIRONMENT": "test",
@@ -52,9 +59,9 @@ def setup_env():
         "REDIS_URL": "redis://localhost:6379/1",
     }
     os.environ.update(test_env)
-    
+
     yield
-    
+
     # Restore original environment variables
     os.environ.clear()
     os.environ.update(original_env)

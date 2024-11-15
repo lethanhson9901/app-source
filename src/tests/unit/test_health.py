@@ -1,15 +1,17 @@
-import pytest
-from fastapi.testclient import TestClient
 import sys
 from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from src.app.main import app  # noqa: E402
 
 # Add the project root directory to PYTHONPATH
 project_root = str(Path(__file__).parent.parent.parent.parent)
 sys.path.insert(0, project_root)
 
-from src.app.main import app
-
 client = TestClient(app)
+
 
 @pytest.mark.unit
 def test_health_check():
@@ -17,6 +19,7 @@ def test_health_check():
     response = client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
 
 @pytest.mark.unit
 def test_health_check_ready():

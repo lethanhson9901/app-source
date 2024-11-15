@@ -1,29 +1,34 @@
-# src/app/api/views.py
+from typing import Annotated, List
+
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import APIKeyHeader
-from typing import List, Optional
-from ..models import Item
-from ..dependencies import get_db
+
 from ..config import settings
-import structlog
+from ..dependencies import get_db
+from ..models import Item
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/v1")
 api_key_header = APIKeyHeader(name="X-API-Key")
 
+# Define dependency type annotations
+DBDependency = Annotated[get_db, Depends(get_db)]
+APIKeyDependency = Annotated[str, Depends(api_key_header)]
+
+
 @router.get("/items", response_model=List[Item])
 async def get_items(
+    db: DBDependency,
+    api_key: APIKeyDependency,
     skip: int = 0,
     limit: int = 10,
-    db=Depends(get_db),
-    api_key: str = Depends(api_key_header)
 ):
     if api_key != settings.API_KEY:
         logger.error("invalid_api_key", key=api_key)
         raise HTTPException(status_code=403, detail="Invalid API key")
-    
+
     items = await db.fetch_all(
-        "SELECT * FROM items OFFSET :skip LIMIT :limit",
-        {"skip": skip, "limit": limit}
+        "SELECT * FROM items OFFSET :skip LIMIT :limit", {"skip": skip, "limit": limit}
     )
     return items

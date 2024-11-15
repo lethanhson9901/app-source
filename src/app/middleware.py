@@ -1,52 +1,49 @@
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
 import time
-from prometheus_client import Histogram
-import structlog
 from typing import Callable
-import asyncio
+
+import structlog
+from fastapi import Request
+from prometheus_client import Histogram
+from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = structlog.get_logger(__name__)
 
 request_duration = Histogram(
-    'http_request_duration_seconds',
-    'HTTP request duration in seconds',
-    ['method', 'endpoint']
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["method", "endpoint"],
 )
 
+
 class MetricsMiddleware(BaseHTTPMiddleware):
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ):
+    async def dispatch(self, request: Request, call_next: Callable):
         start_time = time.time()
         response = await call_next(request)
         duration = time.time() - start_time
-        
+
         request_duration.labels(
-            method=request.method,
-            endpoint=request.url.path
+            method=request.method, endpoint=request.url.path
         ).observe(duration)
-        
+
         return response
 
+
 class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ):
+    async def dispatch(self, request: Request, call_next: Callable):
         logger.info(
             "request_started",
             method=request.method,
             path=request.url.path,
-            client_ip=request.client.host
+            client_ip=request.client.host,
         )
-        
+
         try:
             response = await call_next(request)
             logger.info(
                 "request_completed",
                 method=request.method,
                 path=request.url.path,
-                status_code=response.status_code
+                status_code=response.status_code,
             )
             return response
         except Exception as e:
@@ -54,6 +51,6 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "request_failed",
                 method=request.method,
                 path=request.url.path,
-                error=str(e)
+                error=str(e),
             )
             raise
