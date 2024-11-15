@@ -1,5 +1,5 @@
 # Stage 1: Builder/Compiler
-FROM python:3.11 as builder
+FROM python:3.11-slim as builder
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -7,16 +7,18 @@ ENV PYTHONUNBUFFERED=1 \
     POETRY_VERSION=1.7.0 \
     POETRY_HOME="/opt/poetry" \
     POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false
+    POETRY_VIRTUALENVS_CREATE=false \
+    DEBIAN_FRONTEND=noninteractive
 
 # Add Poetry to PATH
 ENV PATH="$POETRY_HOME/bin:$PATH"
 
 # Install system dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        build-essential \
+    apt-get install --yes --no-install-recommends \
+        gcc \
+        g++ \
+        libffi-dev \
         libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
@@ -36,7 +38,7 @@ RUN poetry install --only main --no-root
 COPY src/ src/
 
 # Stage 2: Runtime
-FROM python:3.11
+FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -45,9 +47,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app" \
     PORT=8080
 
-# Install system dependencies
+# Install runtime dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+    apt-get install --yes --no-install-recommends \
         libpq5 \
         curl && \
     rm -rf /var/lib/apt/lists/* && \
