@@ -1,0 +1,278 @@
+version: '3.8'
+
+# Default environment variables
+x-environment: &default-environment
+  # Application Settings
+  APP_NAME: "Python Application"
+  APP_VERSION: "1.0.0"
+  ENVIRONMENT: "${ENVIRONMENT:-development}"
+  LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+  ENABLE_METRICS: "true"
+  
+  # Security Settings
+  API_KEY: "${API_KEY:-default-dev-key}"
+  ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-*}"
+
+# Default resource limits
+x-resource-limits: &default-resource-limits
+  cpus: '0.5'
+  memory: 512M
+
+# Default healthcheck settings
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 10s
+
+# Default logging settings
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+    tag: "{{.Name}}/{{.ID}}"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_VERSION=${BUILD_VERSION:-latest}
+      labels:
+        - "com.example.description=Python FastAPI Application"
+        - "com.example.department=Engineering"
+        - "com.example.label-with-empty-value"
+    image: ${DOCKER_REGISTRY:-local}/python-app:${IMAGE_TAG:-latest}
+    environment:
+      <<: *default-environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-db}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379/0
+    env_file: .env
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    networks:
+      app-network:
+        aliases:
+          - app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: ${APP_REPLICAS:-1}
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          <<: *default-resource-limits
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+    logging: *default-logging
+    volumes:
+      - app-logs:/app/logs:rw
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
+      - /var/run:size=100M
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    networks:
+      app-network:
+        aliases:
+          - postgres
+    volumes:
+      - type: volume
+        source: postgres-data
+        target: /var/lib/postgresql/data
+      - type: bind
+        source: ./init-scripts/postgres
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+    deploy:
+      resources:
+        limits:
+          <<: *default-resource-limits
+          memory: 1G
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-db}"]
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redis}"]
+    networks:
+      app-network:
+        aliases:
+          - redis
+    volumes:
+      - redis-data:/data
+    deploy:
+      resources:
+        limits:
+          <<: *default-resource-limits
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    image: prom/prometheus:latest
+    user: nobody
+    networks:
+      app-network:
+        aliases:
+          - prometheus
+    volumes:
+      - type: bind
+        source: ./src/monitoring/prometheus.yml
+        target: /etc/prometheus/prometheus.yml
+        read_only: true
+      - type: volume
+        source: prometheus-data
+        target: /prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.external-url=http://prometheus:9090'
+    deploy:
+      resources:
+        limits:
+          <<: *default-resource-limits
+          memory: 1G
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "wget", "--spider", "-S", "http://localhost:9090/-/healthy"]
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:latest
+    user: grafana
+    networks:
+      app-network:
+        aliases:
+          - grafana
+    volumes:
+      - type: bind
+        source: ./src/monitoring/grafana-dashboards
+        target: /etc/grafana/provisioning/dashboards
+        read_only: true
+      - type: bind
+        source: ./src/monitoring/grafana-datasources
+        target: /etc/grafana/provisioning/datasources
+        read_only: true
+      - type: volume
+        source: grafana-data
+        target: /var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    deploy:
+      resources:
+        limits:
+          <<: *default-resource-limits
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD-SHELL", "wget --spider -S http://localhost:3000/api/health || exit 1"]
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+  nginx:
+    image: nginx:alpine
+    networks:
+      app-network:
+        aliases:
+          - nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - type: bind
+        source: ./nginx/conf.d
+        target: /etc/nginx/conf.d
+        read_only: true
+      - type: bind
+        source: ./nginx/ssl
+        target: /etc/nginx/ssl
+        read_only: true
+    depends_on:
+      - app
+    deploy:
+      resources:
+        limits:
+          <<: *default-resource-limits
+    healthcheck:
+      <<: *default-healthcheck
+      test: ["CMD", "nginx", "-t"]
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  app-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: app-net
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+    labels:
+      - "com.example.description=App network"
+
+volumes:
+  app-logs:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/logs
+      o: bind
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# Global configuration
+x-labels: &global-labels
+  maintainer: "Your Name <your.email@example.com>"
+  environment: "${ENVIRONMENT:-development}"
+  project: "python-app"
