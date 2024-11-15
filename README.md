@@ -65,8 +65,8 @@ A production-ready Python FastAPI application with a complete CI/CD pipeline, im
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/python-app.git
-cd python-app
+git clone https://github.com/lethanhson9901/app-source.git
+cd app-source
 ```
 
 2. **Set up the environment**
@@ -86,7 +86,7 @@ chmod +x run.sh
 ./run.sh
 
 # Or manually
-docker-compose up -d
+docker compose up -d
 ```
 
 4. **Access the services**
