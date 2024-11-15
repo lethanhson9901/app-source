@@ -7,18 +7,20 @@ ENV PYTHONUNBUFFERED=1 \
     POETRY_VERSION=1.7.0 \
     POETRY_HOME="/opt/poetry" \
     POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false
+    POETRY_VIRTUALENVS_CREATE=false \
+    DEBIAN_FRONTEND=noninteractive
 
 # Add Poetry to PATH
 ENV PATH="$POETRY_HOME/bin:$PATH"
 
 # Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        curl \
-        build-essential \
-        libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install --yes --no-install-recommends \
+        gcc \
+        g++ \
+        libffi-dev \
+        libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 -
@@ -45,14 +47,14 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app" \
     PORT=8080
 
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install --yes --no-install-recommends \
         libpq5 \
-        curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && addgroup --system --gid 1001 appgroup \
-    && adduser --system --uid 1001 --gid 1001 appuser
+        curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --gid 1001 appuser
 
 # Set working directory
 WORKDIR /app

@@ -86,6 +86,9 @@ chmod +x run.sh
 ./run.sh
 
 # Or manually
+
+docker compose build app # manually build: `docker build -t local/python-app:latest .`
+
 docker compose up -d
 ```
 
