@@ -114,6 +114,31 @@ poetry run pre-commit install
 poetry run pre-commit install --hook-type commit-msg
 ```
 
+    To disable/remove pre-commit hooks, you have a few options:
+
+    1. To skip pre-commit checks for a single commit:
+    ```bash
+    git commit -m "your message" --no-verify
+    ```
+
+    2. To temporarily disable pre-commit:
+    ```bash
+    SKIP=pre-commit git commit -m "your message"
+    ```
+
+    3. To completely uninstall pre-commit hooks:
+    ```bash
+    pre-commit uninstall
+    pre-commit uninstall --hook-type commit-msg
+    ```
+
+    4. You can also manually remove the hooks by deleting them from `.git/hooks/`:
+    ```bash
+    rm .git/hooks/pre-commit
+    rm .git/hooks/commit-msg
+    ```
+
+    Would you like me to explain more about any of these methods or their implications?
 3. **Run tests**
 ```bash
 # Run all tests
