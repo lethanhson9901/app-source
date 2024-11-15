@@ -3,6 +3,7 @@ name = "app"
 version = "0.1.0"
 description = "Python Application with Best Practices"
 authors = ["Your Name <your.email@example.com>"]
+packages = [{include = "src"}]  # Add this line
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -35,3 +36,62 @@ pre-commit = "^3.5.0"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests"
+]
+addopts = """
+    --verbose
+    --strict-markers
+    --cov=src/app
+    --cov-report=html
+    --cov-report=term-missing
+    --no-cov-on-fail
+"""
+
+[tool.coverage.run]
+source = ["src/app"]
+omit = [
+    "src/tests/*",
+    "src/app/__pycache__/*",
+    "src/app/monitoring/*",
+    "src/app/*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
+    "except ImportError:",
+    "raise Exception"
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.ruff]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = []
+line-length = 88
+target-version = "py311"

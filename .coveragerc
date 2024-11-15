@@ -1,0 +1,22 @@
+[run]
+source = src/app
+omit =
+    src/tests/*
+    src/app/__pycache__/*
+    src/app/monitoring/*
+    src/app/*/__pycache__/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    pass
+    raise ImportError
+    except ImportError:
+    raise Exception
+
+[html]
+directory = htmlcov
