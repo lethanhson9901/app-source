@@ -13,6 +13,7 @@ env:
   PYTHON_VERSION: '3.11'
   POETRY_VERSION: '1.7.0'
   DOCKER_REGISTRY: ghcr.io
+  VERSION: 1.0.0  # your version
   IMAGE_NAME: ${{ github.repository }}
   TRIVY_VERSION: '0.47.0'
   SONAR_SCANNER_VERSION: '5.0.1.3006'
@@ -311,41 +312,78 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
+      - name: Set build variables
+        run: |
+          # Get branch name
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            BRANCH="${{ github.head_ref }}"
+          else
+            BRANCH=${GITHUB_REF#refs/heads/}
+          fi
+
+          # Set branch name
+          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
+
+          # Set timestamp
+          echo "TIMESTAMP=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+
+      - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            # Branch and version (e.g., main_1.0.0)
+            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}
+            # Branch, version and timestamp (e.g., main_1.0.0_202411161234)
+            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
+            # Latest tag for main branch
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha,format=long
+            # Git tags
+            type=ref,event=tag
+            # Git short SHA
+            type=sha,format=short
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
             org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.source=${{ github.event.repository.html_url }}
+            org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            BUILD_VERSION=${{ steps.meta.outputs.version }}
+            BUILD_VERSION=${{ env.VERSION }}
+            BUILD_TIMESTAMP=${{ env.TIMESTAMP }}
+            BUILD_SHA=${{ github.sha }}
+
+      - name: Verify image tags
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "============= Image Tags ============="
+          echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\0' | xargs -0 -n1 echo "  -"
+
+          echo "============= Pull Test ============="
+          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }}
+
+          echo "============= Image Details ============="
+          docker inspect ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }} | jq '.[0].Config.Labels'
 
       - name: Sign the published Docker image
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
