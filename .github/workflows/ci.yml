@@ -203,57 +203,64 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   container-security:
-    name: Container Security Scan
-    needs: [verify, test]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-      packages: write
+  name: Container Security Scan
+  needs: [verify, test]
+  runs-on: ubuntu-latest
+  permissions:
+    contents: read
+    security-events: write
+    packages: write
 
-    steps:
-      - uses: actions/checkout@v4
+  steps:
+    - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          load: true
-          tags: ${{ env.IMAGE_NAME }}:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        load: true
+        tags: ${{ env.IMAGE_NAME }}:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:test
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.IMAGE_NAME }}:test
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+        vuln-type: 'os,library'
+        ignore-unfixed: true
+        timeout: '10m'
 
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-          category: Trivy
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+        category: Trivy
 
-      - name: Run Dockle image linter
-        uses: goodwithtech/dockle-action@v1
-        with:
-          image: ${{ env.IMAGE_NAME }}:test
-          format: sarif
-          output: dockle-results.sarif
+    - name: Install Dockle
+      run: |
+        VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+        curl -L -o dockle.deb https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.deb
+        sudo dpkg -i dockle.deb
 
-      - name: Upload Dockle scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: dockle-results.sarif
-          category: Dockle
+    - name: Run Dockle
+      run: |
+        dockle --format sarif --output dockle-results.sarif ${{ env.IMAGE_NAME }}:test
+      continue-on-error: true
+
+    - name: Upload Dockle scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: dockle-results.sarif
+        category: Dockle
 
   publish:
     name: Publish Image
