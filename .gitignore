@@ -161,7 +161,7 @@ credentials/
 .scannerwork/
 
 # Poetry
-poetry.lock
+# poetry.lock
 
 # Helm
 charts/*.tgz
