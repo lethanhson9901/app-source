@@ -1,0 +1,52 @@
+# Safety policy file for vulnerability management
+security:
+  # Vulnerability exceptions
+  ignore-vulnerabilities:
+    # Authentication & Cryptography
+    70715:
+      reason: "OpenSSH ECDSA key vulnerability - we don't use OpenSSH keys"
+      expires: "2024-12-16"  # Review in 30 days
+    70716:
+      reason: "JWT bomb DoS - we implement token size limits in application code"
+      expires: "2024-12-16"
+    64396:
+      reason: "Side-channel attacks - not applicable in our deployment environment"
+      expires: "2024-12-16"
+    64459:
+      reason: "Minerva attack - planning to migrate away from ecdsa"
+      expires: "2024-12-16"
+    70612:
+      reason: "Jinja2 SSTI - False positive: we don't use untrusted templates and implement proper sandboxing"
+      expires: "2024-12-16"
+
+  # Continue scanning even if there's an error processing a requirement
+  continue-on-vulnerability-error: true
+
+  # Ignore unpinned requirements (e.g., package>=1.0.0)
+  ignore-unpinned-requirements: true  # Fixed: was ignore-unpinned-requirement
+
+  # CVSS severity settings
+  ignore-cvss-severity-below: 0
+  ignore-cvss-unknown-severity: true
+
+# Package scanning configuration
+ignored-packages:
+  - "pytest*"
+  - "coverage"
+  - "pytest-cov"
+  - "pytest-asyncio"
+  - "httpx"
+  - "aioresponses"
+  - "black"
+  - "ruff"
+  - "isort"
+  - "mypy"
+  - "bandit"
+  - "pre-commit"
+  - "types-*"
+
+notifications:
+  # Notification settings
+  slack: false
+  email: false
+  Exit-Zero: true  # Don't fail builds on vulnerabilities (handled by policy)

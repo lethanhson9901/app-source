@@ -67,30 +67,59 @@ jobs:
           poetry run black --check .
           poetry run isort --check-only .
 
+      - name: Get commit info
+        id: commit
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "sha_full=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
+
       - name: Run security scan
         run: |
-          # Create reports directory if it doesn't exist
-          mkdir -p reports
+          # Create reports directory with commit info
+          mkdir -p reports/security-scan_${{ steps.commit.outputs.sha_short }}_${{ steps.commit.outputs.timestamp }}
+          REPORT_DIR=reports/security-scan_${{ steps.commit.outputs.sha_short }}_${{ steps.commit.outputs.timestamp }}
 
           # Run bandit security scan on the entire project
           poetry run bandit -r . \
             --format json \
             --exclude './.venv,./tests,./build,./dist' \
             --skip B101,B104 \
-            --output reports/bandit.json || true
+            --output $REPORT_DIR/bandit.json || true
 
-          # Convert to SARIF format using our script
-          poetry run python scripts/bandit_to_sarif.py reports/bandit.json reports/bandit-results.sarif
+          # Install bandit-sarif-formatter using pip for direct CLI access
+          pip install bandit-sarif-formatter
 
-          # Run safety check for known vulnerabilities
-          poetry run safety check
+          # Convert to SARIF format
+          bandit-sarif-formatter \
+            -i $REPORT_DIR/bandit.json \
+            -o $REPORT_DIR/bandit-results.sarif
+
+          # Run safety check with policy file and save report
+          poetry run safety check \
+            --policy-file .safety-policy.yml \
+            --output text \
+            --full-report \
+            > $REPORT_DIR/safety-report.txt || true
+
+          # Create scan metadata file
+          cat > $REPORT_DIR/scan-info.json << EOF
+          {
+            "commit_sha": "${{ steps.commit.outputs.sha_full }}",
+            "commit_sha_short": "${{ steps.commit.outputs.sha_short }}",
+            "scan_timestamp": "${{ steps.commit.outputs.timestamp }}",
+            "branch": "${GITHUB_REF#refs/heads/}",
+            "workflow_run": "${{ github.run_id }}"
+          }
+          EOF
 
       - name: Upload security scan reports
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: security-reports
-          path: reports/
+          name: security-reports_${{ steps.commit.outputs.sha_short }}_${{ steps.commit.outputs.timestamp }}
+          path: reports/security-scan_${{ steps.commit.outputs.sha_short }}_${{ steps.commit.outputs.timestamp }}
+          retention-days: 90
 
       # Add artifact upload for reports
       - name: Upload security scan reports

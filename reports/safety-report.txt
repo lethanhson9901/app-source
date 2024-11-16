@@ -1,0 +1,61 @@
++==============================================================================+
+
+                                   /$$$$$$            /$$
+                                  /$$__  $$          | $$
+               /$$$$$$$  /$$$$$$ | $$  \__//$$$$$$  /$$$$$$   /$$   /$$
+              /$$_____/ |____  $$| $$$$   /$$__  $$|_  $$_/  | $$  | $$
+             |  $$$$$$   /$$$$$$$| $$_/  | $$$$$$$$  | $$    | $$  | $$
+              \____  $$ /$$__  $$| $$    | $$_____/  | $$ /$$| $$  | $$
+              /$$$$$$$/|  $$$$$$$| $$    |  $$$$$$$  |  $$$$/|  $$$$$$$
+             |_______/  \_______/|__/     \_______/   \___/   \____  $$
+                                                              /$$  | $$
+                                                             |  $$$$$$/
+      by pyup.io                                              \______/
+
++==============================================================================+
+
+ REPORT
+
+  Safety v2.4.0b2 is scanning for Vulnerabilities...
+  Scan configuration using a security policy file .safety-policy.yml
+  Scanning dependencies in your environment:
+
+  -> /home/son/miniconda3/envs/py311/lib/python3.11/site-packages
+  -> /home/son/miniconda3/envs/py311/lib/python3.11/lib-dynload
+  -> /home/son/miniconda3/envs/py311/lib/python311.zip
+  -> /home/son/Documents/note/project/ci-cd-setup/app-source
+  -> /home/son/miniconda3/envs/py311/lib/python3.11/site-
+  packages/setuptools/_vendor
+  -> /home/son/miniconda3/envs/py311/bin
+  -> /home/son/miniconda3/envs/py311/lib/python3.11
+
+  Using open-source vulnerability database
+  Found and scanned 116 packages
+  Timestamp 2024-11-16 17:18:19
+  0 vulnerabilities reported
+  1 vulnerability ignored
+
+  * Continue-on-error is enabled, so returning successful (0) exit code in
+  all cases.
+  * Could not filter by severity, please upgrade your account to include
+  severity data.
+
++==============================================================================+
+ VULNERABILITIES FOUND
++==============================================================================+
+
+-> Vulnerability found in jinja2 version 3.1.4
+   Vulnerability ID: 70612
+   This vulnerability is being ignored.
+   Reason: Unknown CVSS severity, ignored by severity rule in policy
+   file.
+   For more information about this vulnerability, visit
+   https://data.safetycli.com/v/70612/97c
+
+
++==============================================================================+
+
+ Scan was completed using a safety policy file. 0 vulnerabilities were
+ reported. 1 vulnerability from 1 package was ignored.
+
++==============================================================================+
