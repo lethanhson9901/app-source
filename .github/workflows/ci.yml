@@ -56,18 +56,32 @@ jobs:
 
       - name: Run linters
         run: |
+          # Create directory for reports
+          mkdir -p reports
+
+          # Run linters
           poetry run ruff check . --output-format=github
           poetry run black --check .
           poetry run isort --check-only .
-          poetry run bandit -r src/ -f sarif -o bandit-results.sarif
+          
+          # Run bandit with SARIF output
+          poetry run bandit -r src/ -f sarif -o reports/bandit-results.sarif || true
           poetry run safety check
           
       - name: Upload Bandit scan results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3  # Updated to v3
         if: always()
         with:
-          sarif_file: bandit-results.sarif
+          sarif_file: reports/bandit-results.sarif
           category: Bandit
+
+      # Add artifact upload for reports
+      - name: Upload security scan reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: reports/
 
   sast:
     name: Static Analysis
