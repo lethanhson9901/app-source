@@ -16,6 +16,9 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   TRIVY_VERSION: '0.47.0'
   SONAR_SCANNER_VERSION: '5.0.1.3006'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  TRIVY_NO_PROGRESS: true
+  TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   verify:
@@ -226,6 +229,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Cache Trivy vulnerability database
+      - name: Cache Trivy vulnerability database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+
+      # Run Trivy with retry mechanism
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -236,6 +249,10 @@ jobs:
           vuln-type: 'os,library'
           ignore-unfixed: true
           timeout: '10m'
+          cache-dir: ~/.cache/trivy
+          exit-code: '1'
+          retry: '3'
+          retry-delay: '30s'
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v2
@@ -244,15 +261,31 @@ jobs:
           sarif_file: 'trivy-results.sarif'
           category: Trivy
 
-      - name: Install Dockle
+      # Cache Dockle database
+      - name: Cache Dockle
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/dockle
+          key: ${{ runner.os }}-dockle-${{ hashFiles('**/Dockerfile') }}
+          restore-keys: |
+            ${{ runner.os }}-dockle-
+
+      # Install and run Dockle with retry
+      - name: Install and Run Dockle
         run: |
-          VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          curl -L -o dockle.deb https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.deb
+          # Install Dockle with retry
+          for i in {1..3}; do
+            VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+            curl -L -o dockle.deb https://github.com/goodwithtech/dockle/releases/download/v${VERSION}/dockle_${VERSION}_Linux-64bit.deb && break
+            sleep 30
+          done
           sudo dpkg -i dockle.deb
 
-      - name: Run Dockle
-        run: |
-          dockle --format sarif --output dockle-results.sarif ${{ env.IMAGE_NAME }}:test
+          # Run Dockle with retry
+          for i in {1..3}; do
+            dockle --cache-dir ~/.cache/dockle --format sarif --output dockle-results.sarif ${{ env.IMAGE_NAME }}:test && break
+            sleep 30
+          done
         continue-on-error: true
 
       - name: Upload Dockle scan results
