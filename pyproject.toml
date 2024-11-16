@@ -3,7 +3,7 @@ name = "app"
 version = "0.1.0"
 description = "Python Application with Best Practices"
 authors = ["Your Name <your.email@example.com>"]
-packages = [{include = "src"}]  # Add this line
+packages = [{include = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -81,7 +81,7 @@ exclude_lines = [
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ["py311"]
 include = '\.pyi?$'
 extend-exclude = '''
 # A regex preceded with ^/ will apply only to files and directories
@@ -104,18 +104,39 @@ select = [
     "B",   # flake8-bugbear
     "I",   # isort
     "C",   # flake8-comprehensions
-    "UP",  # pyupgrade
+    "UP"   # pyupgrade
 ]
-ignore = ["B101"]  # ignore assert statements
+
 exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
     "tests",
-    "src/tests",
+    "src/tests"
 ]
+
+[tool.mypy]
+python_version = "3.11"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+strict_optional = true
+
+[[tool.mypy.overrides]]
+module = "asyncpg.*"
+ignore_missing_imports = true
 
 [tool.bandit]
-exclude_dirs = ["tests", "src/tests"]
-skips = ["B101"]  # Skip assert statements
-
+exclude_dirs = ["tests", "src/tests", ".venv", "build", "dist"]
+skips = ["B101", "B104"]  # Skip assert statements and hardcoded bind
 targets = ["src"]
 
 [tool.bandit.assert_used]

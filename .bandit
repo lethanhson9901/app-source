@@ -1,0 +1,26 @@
+# .bandit
+exclude_dirs:
+  - tests
+  - src/tests
+  - venv
+  - .venv
+  - build
+  - dist
+
+skips:
+  - B101  # skip assert statements
+  - B104  # skip hardcoded bind all interfaces
+
+per_file_ignores:
+  - 'tests/*':
+      - B101
+  - 'src/tests/*':
+      - B101
+  - 'src/app/config.py':
+      - B104
+
+# Confidence levels
+confidence_threshold: 0.8
+
+# Severity levels
+severity_threshold: medium

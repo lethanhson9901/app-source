@@ -1,10 +1,12 @@
-from typing import AsyncGenerator, cast
+from collections.abc import AsyncGenerator
+from typing import cast
 
 import redis.asyncio as redis
-from redis.asyncio.client import Redis
+
 # Use Any for asyncpg types since there are no stubs
 from asyncpg import connect
 from asyncpg.connection import Connection
+from redis.asyncio.client import Redis
 
 from .config import Settings, settings
 
@@ -15,10 +17,10 @@ Connection = Connection  # type: ignore
 async def get_db() -> AsyncGenerator[Connection, None]:
     """
     Create and yield a database connection.
-    
+
     Returns:
         AsyncGenerator[Connection, None]: Database connection
-    
+
     Raises:
         asyncpg.exceptions.PostgresError: If connection fails
     """
@@ -32,10 +34,10 @@ async def get_db() -> AsyncGenerator[Connection, None]:
 async def get_redis() -> AsyncGenerator[Redis, None]:
     """
     Create and yield a Redis connection.
-    
+
     Returns:
         AsyncGenerator[Redis, None]: Redis connection
-    
+
     Raises:
         redis.exceptions.RedisError: If connection fails
     """
@@ -49,7 +51,7 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
 def get_settings() -> Settings:
     """
     Get application settings.
-    
+
     Returns:
         Settings: Application settings configuration
     """

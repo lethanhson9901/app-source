@@ -24,33 +24,33 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetches all history for all branches and tags
-          
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: ${{ env.POETRY_VERSION }}
           virtualenvs-create: true
-          
+
       - name: Load cached dependencies
         uses: actions/cache@v3
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-          
+
       - name: Install dependencies
         run: poetry install --with dev
-        
+
       - name: Run pre-commit hooks
         uses: pre-commit/action@v3.0.0
 
@@ -63,11 +63,11 @@ jobs:
           poetry run ruff check . --output-format=github
           poetry run black --check .
           poetry run isort --check-only .
-          
+
           # Run bandit with SARIF output
           poetry run bandit -r src/ -f sarif -o reports/bandit-results.sarif || true
           poetry run safety check
-          
+
       - name: Upload Bandit scan results
         uses: github/codeql-action/upload-sarif@v3  # Updated to v3
         if: always()
@@ -89,15 +89,15 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2
         with:
           languages: python
-          
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
         with:
@@ -120,7 +120,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
         image: redis:7-alpine
         ports:
@@ -130,29 +130,29 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: ${{ env.POETRY_VERSION }}
-          
+
       - name: Load cached dependencies
         uses: actions/cache@v3
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-          
+
       - name: Install dependencies
         run: poetry install --with dev,test
-        
+
       - name: Run tests with coverage
         run: |
           poetry run pytest \
@@ -163,13 +163,13 @@ jobs:
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
-          
+
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
         with:
           files: ./coverage.xml
           fail_ci_if_error: true
-          
+
       - name: Upload test results
         uses: actions/upload-artifact@v3
         if: always()
@@ -178,7 +178,7 @@ jobs:
           path: |
             junit/test-results.xml
             htmlcov/
-            
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -193,13 +193,13 @@ jobs:
       contents: read
       security-events: write
       packages: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
+
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -208,7 +208,7 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -216,21 +216,21 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          
+
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v2
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
           category: Trivy
-          
+
       - name: Run Dockle image linter
         uses: goodwithtech/dockle-action@v1
         with:
           image: ${{ env.IMAGE_NAME }}:test
           format: sarif
           output: dockle-results.sarif
-          
+
       - name: Upload Dockle scan results
         uses: github/codeql-action/upload-sarif@v2
         if: always()
@@ -246,20 +246,20 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v5
@@ -277,7 +277,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.meta.outputs.version }}
             org.opencontainers.image.created=${{ steps.meta.outputs.created }}
-            
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
@@ -289,7 +289,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             BUILD_VERSION=${{ steps.meta.outputs.version }}
-            
+
       - name: Sign the published Docker image
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:

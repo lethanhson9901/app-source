@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, List, Optional, Union, cast
+from typing import Any, cast
 
 from pydantic_settings import BaseSettings
 
@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 def find_env_file() -> str:
     """
     Find the .env file by walking up the directory tree.
-    
+
     Returns:
         str: Path to the found .env file or '.env' as fallback
     """
@@ -22,6 +22,20 @@ def find_env_file() -> str:
     return ".env"  # fallback to default
 
 
+def get_default_host() -> str:
+    """
+    Determine the default host based on environment.
+
+    Returns:
+        str: The appropriate host binding
+    """
+    env = os.getenv("APP_ENVIRONMENT", "development")
+    # Only bind to all interfaces in container/production environment
+    if env in ["production", "container"]:
+        return "0.0.0.0"  # nosec B104 # Required for production/container environment
+    return "127.0.0.1"  # Default to localhost for security
+
+
 class Settings(BaseSettings):
     #######################################
     # Core Application Settings
@@ -30,7 +44,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     APP_ENVIRONMENT: str = "development"
     APP_DEBUG: bool = False
-    APP_HOST: str = "0.0.0.0"
+    APP_HOST: str = get_default_host()
     APP_PORT: int = 8080
     APP_LOG_LEVEL: str = "INFO"
 
@@ -51,7 +65,7 @@ class Settings(BaseSettings):
     DB_MAX_CONNECTIONS: int = 100
     DB_IDLE_TIMEOUT: int = 300
     DB_CONNECT_TIMEOUT: int = 10
-    DATABASE_URL: Optional[str] = None
+    DATABASE_URL: str | None = None
 
     #######################################
     # Redis Configuration
@@ -62,12 +76,12 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_SSL: bool = False
     REDIS_TIMEOUT: int = 5
-    REDIS_URL: Optional[str] = None
+    REDIS_URL: str | None = None
 
     #######################################
     # Security Configuration
     #######################################
-    CORS_ALLOWED_ORIGINS: List[str] = ["*"]
+    CORS_ALLOWED_ORIGINS: list[str] = ["*"]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_MAX_AGE: int = 3600
 
@@ -110,13 +124,13 @@ class Settings(BaseSettings):
     TEST_DB_USER: str = "user"
     TEST_DB_PASSWORD: str = "password"
     TEST_DB_NAME: str = "test_db"
-    TEST_DATABASE_URL: Optional[str] = None
+    TEST_DATABASE_URL: str | None = None
 
     TEST_REDIS_HOST: str = "localhost"
     TEST_REDIS_PORT: int = 6379
     TEST_REDIS_PASSWORD: str = "redis"
     TEST_REDIS_DB: int = 1
-    TEST_REDIS_URL: Optional[str] = None
+    TEST_REDIS_URL: str | None = None
 
     #######################################
     # Feature Flags
@@ -130,21 +144,23 @@ class Settings(BaseSettings):
         case_sensitive = True
 
         @classmethod
-        def parse_env_var(cls, field_name: str, raw_val: str) -> Union[List[str], bool, str]:
+        def parse_env_var(
+            cls, field_name: str, raw_val: str
+        ) -> list[str] | bool | str:  # Changed from Union
             """
             Parse environment variables with special handling for certain fields.
-            
+
             Args:
                 field_name: The name of the environment variable
                 raw_val: The raw value of the environment variable
-                
+
             Returns:
-                Union[List[str], bool, str]: Parsed value of the environment variable
+                list[str] | bool | str: Parsed value of the environment variable
             """
             if field_name == "CORS_ALLOWED_ORIGINS":
                 try:
                     result = json.loads(raw_val)
-                    return cast(List[str], result)
+                    return cast(list[str], result)
                 except json.JSONDecodeError:
                     if raw_val == "*":
                         return ["*"]
@@ -165,7 +181,7 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs: Any) -> None:
         """
         Initialize Settings with environment variables and computed values.
-        
+
         Args:
             **kwargs: Keyword arguments to pass to parent class
         """

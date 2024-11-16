@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,7 +17,7 @@ DBDependency = Annotated[get_db, Depends(get_db)]
 APIKeyDependency = Annotated[str, Depends(api_key_header)]
 
 
-@router.get("/items", response_model=List[Item])
+@router.get("/items", response_model=list[Item])
 async def get_items(
     db: DBDependency,
     api_key: APIKeyDependency,

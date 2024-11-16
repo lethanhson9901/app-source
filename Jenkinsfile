@@ -67,7 +67,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('SAST') {
                     steps {
                         container('python') {
@@ -92,7 +92,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Integration Tests') {
                     steps {
                         container('python') {
@@ -108,10 +108,10 @@ pipeline {
                 container('docker') {
                     script {
                         def image = docker.build("${DOCKER_IMAGE}:${GIT_COMMIT}", "-f Dockerfile.multistage .")
-                        
+
                         // Scan image for vulnerabilities
                         sh "trivy image ${DOCKER_IMAGE}:${GIT_COMMIT}"
-                        
+
                         // Sign image
                         sh "cosign sign ${DOCKER_IMAGE}:${GIT_COMMIT}"
                     }
@@ -149,7 +149,7 @@ pipeline {
             junit 'test-results/**/*.xml'
             recordIssues(tools: [pylint(pattern: 'pylint.log')])
             recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']])
-            
+
             // Clean workspace
             cleanWs()
         }
