@@ -79,8 +79,8 @@ jobs:
             --skip B101,B104 \
             --output reports/bandit.json || true
 
-          # Convert to SARIF format using Python module
-          poetry run python -m bandit_sarif_formatter \
+          # Convert to SARIF format using the correct converter script
+          poetry run bandit_sarif \
             -i reports/bandit.json \
             -o reports/bandit-results.sarif
 
@@ -93,7 +93,6 @@ jobs:
         with:
           name: security-reports
           path: reports/
-
 
       # Add artifact upload for reports
       - name: Upload security scan reports
