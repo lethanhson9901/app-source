@@ -72,12 +72,12 @@ jobs:
           poetry run bandit -r src/ -f json | poetry run bandit-sarif-formatter -o reports/bandit-results.sarif
           poetry run safety check
 
-      - name: Upload Bandit scan results
-        uses: github/codeql-action/upload-sarif@v3  # Updated to v3
+      - name: Upload security scan reports
         if: always()
+        uses: actions/upload-artifact@v3
         with:
-          sarif_file: reports/bandit-results.sarif
-          category: Bandit
+          name: security-reports
+          path: reports/
 
       # Add artifact upload for reports
       - name: Upload security scan reports
