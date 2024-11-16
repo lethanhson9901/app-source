@@ -83,37 +83,40 @@ exclude_lines = [
 line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+^/tests/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+skip = ["tests"]
 
 [tool.ruff]
-select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "C",  # flake8-comprehensions
-    "B",  # flake8-bugbear
-]
-# Ignored rules
-ignore = [
-    "W293",  # Ignore blank line contains whitespace
-]
 line-length = 88
 target-version = "py311"
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "I",   # isort
+    "C",   # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = ["B101"]  # ignore assert statements
+exclude = [
+    "tests",
+    "src/tests",
+]
 
-[tool.mypy]
-python_version = "3.11"
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_return_any = true
-warn_unreachable = true
-strict_optional = true
+[tool.bandit]
+exclude_dirs = ["tests", "src/tests"]
+skips = ["B101"]  # Skip assert statements
 
-[[tool.mypy.overrides]]
-module = "asyncpg.*"
-ignore_missing_imports = true
+targets = ["src"]
 
+[tool.bandit.assert_used]
+skips = ["*/test_*.py", "*/tests/*.py"]

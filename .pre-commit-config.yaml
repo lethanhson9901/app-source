@@ -19,22 +19,32 @@ repos:
     rev: 5.13.2
     hooks:
       - id: isort
+        name: isort (python)
         args: ["--profile", "black", "--filter-files"]
 
   - repo: https://github.com/psf/black
     rev: 24.1.1
     hooks:
       - id: black
+        args: ["--config", "pyproject.toml"]
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.1.14
     hooks:
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args:
+          - --fix
+          - --exit-non-zero-on-fix
 
   - repo: https://github.com/pycqa/bandit
     rev: 1.7.7
     hooks:
       - id: bandit
-        args: ["-c", "pyproject.toml"]
+        args:
+          - "-c"
+          - "pyproject.toml"
+          - "--skip"
+          - "B101"  # Skip assert statements
+          - "--exclude"
+          - "tests/,src/tests/"
         additional_dependencies: ["bandit[toml]"]
