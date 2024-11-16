@@ -192,5 +192,8 @@ jobs:
           echo "============= Image Tags ============="
           echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\0' | xargs -0 -n1 echo "  -"
 
+          echo "============= Pull Test ============="
+          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }}
+
           echo "============= Image Details ============="
           docker inspect ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }} | jq '.[0].Config.Labels'
