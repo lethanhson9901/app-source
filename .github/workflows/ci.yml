@@ -71,7 +71,7 @@ jobs:
         run: |
           # Create reports directory if it doesn't exist
           mkdir -p reports
-          pip install bandit-sarif-formatter
+
           # Run bandit security scan on the entire project
           poetry run bandit -r . \
             --format json \
@@ -80,7 +80,7 @@ jobs:
             --output reports/bandit.json || true
 
           # Convert to SARIF format using our script
-          poetry run python scripts/bandit_to_sarif.py
+          poetry run python scripts/bandit_to_sarif.py reports/bandit.json reports/bandit-results.sarif
 
           # Run safety check for known vulnerabilities
           poetry run safety check
