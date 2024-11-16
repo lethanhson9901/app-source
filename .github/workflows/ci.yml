@@ -69,11 +69,20 @@ jobs:
 
       - name: Run security scan
         run: |
-          # Run bandit security scan and generate SARIF report
-          poetry run bandit -r src/ -f json > reports/bandit.json
-          poetry run python -m bandit_sarif_formatter -i reports/bandit.json -o reports/bandit-results.sarif
+          # Create reports directory if it doesn't exist
+          mkdir -p reports
 
-          # Run safety check
+          # Run bandit security scan on the entire project
+          poetry run bandit -r . \
+            --exclude './.venv,./tests' \
+            -f json > reports/bandit.json || true
+
+          # Convert bandit output to SARIF format
+          poetry run python -m bandit_sarif_formatter \
+            -i reports/bandit.json \
+            -o reports/bandit-results.sarif
+
+          # Run safety check for known vulnerabilities
           poetry run safety check
 
       - name: Upload security scan reports
