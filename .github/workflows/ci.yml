@@ -59,12 +59,15 @@ jobs:
           # Create directory for reports
           mkdir -p reports
 
+          # Install additional dependencies if needed
+          poetry install --with dev --no-interaction
+
           # Run linters
           poetry run ruff check . --output-format=github
           poetry run black --check .
           poetry run isort --check-only .
 
-          # Run bandit with SARIF output
+          # Run security checks
           poetry run bandit -r src/ -f sarif -o reports/bandit-results.sarif || true
           poetry run safety check
 
