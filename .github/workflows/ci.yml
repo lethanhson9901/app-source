@@ -71,7 +71,7 @@ jobs:
         run: |
           # Create reports directory if it doesn't exist
           mkdir -p reports
-
+          pip install bandit-sarif-formatter
           # Run bandit security scan on the entire project
           poetry run bandit -r . \
             --format json \
