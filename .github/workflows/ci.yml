@@ -79,8 +79,8 @@ jobs:
             --skip B101,B104 \
             --output reports/bandit.json || true
 
-          # Convert to SARIF format
-          poetry run bandit-sarif-formatter \
+          # Convert to SARIF format using Python module
+          poetry run python -m bandit_sarif_formatter \
             -i reports/bandit.json \
             -o reports/bandit-results.sarif
 
