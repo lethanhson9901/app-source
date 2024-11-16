@@ -279,5 +279,3 @@ For support, please open an issue in the repository or contact the maintainers.
 
 ---
 Made with ❤️ by [Your Name]
-
-85d54f14311c6ea0987bd759f65d2409f1688b0b
