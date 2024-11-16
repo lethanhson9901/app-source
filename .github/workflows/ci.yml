@@ -67,9 +67,13 @@ jobs:
           poetry run black --check .
           poetry run isort --check-only .
 
-          # Run security checks with JSON output and convert to SARIF
-          poetry run pip install bandit-sarif-formatter
-          poetry run bandit -r src/ -f json | poetry run bandit-sarif-formatter -o reports/bandit-results.sarif
+      - name: Run security scan
+        run: |
+          # Run bandit security scan and generate SARIF report
+          poetry run bandit -r src/ -f json > reports/bandit.json
+          poetry run python -m bandit_sarif_formatter -i reports/bandit.json -o reports/bandit-results.sarif
+
+          # Run safety check
           poetry run safety check
 
       - name: Upload security scan reports
@@ -78,6 +82,7 @@ jobs:
         with:
           name: security-reports
           path: reports/
+
 
       # Add artifact upload for reports
       - name: Upload security scan reports
