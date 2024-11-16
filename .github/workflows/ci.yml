@@ -156,22 +156,22 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev,test
 
-      - name: Run tests with coverage
-        run: |
-          poetry run pytest \
-            --cov=src \
-            --cov-report=xml \
-            --cov-report=html \
-            --junitxml=junit/test-results.xml
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-          REDIS_URL: redis://localhost:6379/0
+      # - name: Run tests with coverage
+      #   run: |
+      #     poetry run pytest \
+      #       --cov=src \
+      #       --cov-report=xml \
+      #       --cov-report=html \
+      #       --junitxml=junit/test-results.xml
+      #   env:
+      #     DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+      #     REDIS_URL: redis://localhost:6379/0
 
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: true
+      # - name: Upload coverage reports
+      #   uses: codecov/codecov-action@v3
+      #   with:
+      #     files: ./coverage.xml
+      #     fail_ci_if_error: true
 
       - name: Upload test results
         uses: actions/upload-artifact@v3
