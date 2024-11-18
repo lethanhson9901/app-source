@@ -1,103 +1,85 @@
 # Stage 1: Builder/Compiler
-FROM python:3.11-slim-bullseye as builder
+FROM python:3.11 as builder
 
-# Set build-time arguments and environment variables
-ARG POETRY_VERSION=1.7.0
-ARG POETRY_HOME="/opt/poetry"
-
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    POETRY_VERSION=${POETRY_VERSION} \
-    POETRY_HOME=${POETRY_HOME} \
+    POETRY_VERSION=1.7.0 \
+    POETRY_HOME="/opt/poetry" \
     POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false \
-    PATH="${POETRY_HOME}/bin:$PATH" \
-    PYTHONPATH="/app"
+    POETRY_VIRTUALENVS_CREATE=false
 
-# Install system dependencies and Poetry in a single layer
+# Add Poetry to PATH
+ENV PATH="$POETRY_HOME/bin:$PATH"
+
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \
         build-essential \
         libpq-dev && \
-    curl -sSL https://install.python-poetry.org | python3 - && \
-    apt-get purge -y --auto-remove build-essential && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    rm -rf /var/lib/apt/lists/*
 
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# Set working directory
 WORKDIR /app
 
-# Copy only dependency files first
-COPY --chown=root:root pyproject.toml poetry.lock ./
+# Copy poetry files
+COPY pyproject.toml poetry.lock ./
 
-# Install dependencies with explicit version pinning
-RUN poetry install --only main --no-root \
-    && find /usr/local -type d -name __pycache__ -exec rm -rf {} + \
-    && rm -rf ~/.cache/pip ~/.cache/poetry
+# Install dependencies
+RUN poetry install --only main --no-root
 
 # Copy source code
-COPY --chown=root:root src/ src/
+COPY src/ src/
 
 # Stage 2: Runtime
-FROM python:3.11-slim-bullseye
+FROM python:3.11
 
-# Set runtime arguments and environment variables
-ARG PORT=8080
-ARG APP_USER=appuser
-ARG APP_GROUP=appgroup
-ARG UID=1001
-ARG GID=1001
-
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app" \
-    PORT=${PORT} \
-    PATH="/usr/local/bin:$PATH"
+    PORT=8080
 
-# Install runtime dependencies and create user in a single layer
+# Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libpq5 \
-        curl \
-        tini && \
-    apt-get clean && \
+        curl && \
     rm -rf /var/lib/apt/lists/* && \
-    groupadd -r -g ${GID} ${APP_GROUP} && \
-    useradd -r -g ${APP_GROUP} -u ${UID} ${APP_USER} && \
-    mkdir -p /app/logs && \
-    chown -R ${APP_USER}:${APP_GROUP} /app
+    addgroup --system --gid 1001 appgroup && \
+    adduser --system --uid 1001 --gid 1001 appuser
 
+# Set working directory
 WORKDIR /app
 
-# Copy only necessary files from builder
-COPY --from=builder --chown=${APP_USER}:${APP_GROUP} /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
-COPY --from=builder --chown=${APP_USER}:${APP_GROUP} /app/src/ ./src/
-COPY --chown=${APP_USER}:${APP_GROUP} .env.example ./.env
+# Copy virtual environment and source code from builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
+COPY --from=builder /app/src/ ./src/
 
-# Set secure permissions
-RUN chmod -R 550 /app && \
-    chmod -R 770 /app/logs && \
-    chmod 640 .env
+# Copy configuration files
+COPY --chown=appuser:appgroup .env.example ./.env
+
+# Set permissions
+RUN chown -R appuser:appgroup /app \
+    && chmod -R 550 /app \
+    && mkdir -p /app/logs \
+    && chown -R appuser:appgroup /app/logs \
+    && chmod -R 770 /app/logs
 
 # Switch to non-root user
-USER ${APP_USER}:${APP_GROUP}
+USER appuser
 
-# Health check with timeout
+# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health/live || exit 1
-
-# Use tini as init system
-ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Expose port
 EXPOSE ${PORT}
 
-# Start application with optimized settings
-CMD ["python", "-m", "uvicorn", \
-    "src.app.main:app", \
-    "--host", "0.0.0.0", \
-    "--port", "8080", \
-    "--proxy-headers", \
-    "--forwarded-allow-ips", "*", \
-    "--workers", "4", \
-    "--access-log"]
+# Start application
+CMD ["python", "-m", "uvicorn", "src.app.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]

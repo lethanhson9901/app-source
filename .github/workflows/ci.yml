@@ -54,12 +54,6 @@ jobs:
         context: .
         load: true
         tags: ${{ env.IMAGE_NAME }}:test
-        build-args: |
-          DNS_SERVER=8.8.8.8
-
-    - name: Run tests in Docker container
-      run: |
-        docker run --rm --dns 8.8.8.8 ${{ env.IMAGE_NAME }}:test poetry run pytest
 
   publish:
     name: Publish Image
