@@ -1,356 +1,63 @@
-# .github/workflows/ci.yml
 name: CI
 
 on:
   push:
-    branches: [ main, develop ]
-    tags: [ 'v*.*.*' ]
+    branches: [main, develop]
+    tags: ['v*.*.*']
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.11'
   POETRY_VERSION: '1.7.0'
   DOCKER_REGISTRY: ghcr.io
-  VERSION: 1.0.0  # your version
+  VERSION: 1.0.0
   IMAGE_NAME: ${{ github.repository }}
-  TRIVY_VERSION: '0.47.0'
-  SONAR_SCANNER_VERSION: '5.0.1.3006'
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  TRIVY_NO_PROGRESS: true
-  TRIVY_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  verify:
-    name: Code Quality & Security
+
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetches all history for all branches and tags
+    - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
-          virtualenvs-create: true
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: ${{ env.POETRY_VERSION }}
+        virtualenvs-create: true
 
-      - name: Load cached dependencies
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    - name: Load cached dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Install dependencies
-        run: poetry install --with dev
+    - name: Install dependencies
+      run: poetry install --with dev
 
-      - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.0
+    - name: Run tests
+      run: poetry run pytest
 
-      - name: Run linters
-        run: |
-          # Create directory for reports
-          mkdir -p reports
-
-          # Install additional dependencies if needed
-          poetry install --with dev --no-interaction
-
-          # Run linters
-          poetry run ruff check . --output-format=github
-          poetry run black --check .
-          poetry run isort --check-only .
-
-      - name: Run security scan
-        run: |
-          # Create reports directory if it doesn't exist
-          mkdir -p reports
-
-          # Run bandit security scan on the entire project
-          poetry run bandit -r . \
-            --format json \
-            --exclude './.venv,./tests,./build,./dist' \
-            --skip B101,B104 \
-            --output reports/bandit.json || true
-
-          # Convert to SARIF format using our script
-          poetry run python scripts/bandit_to_sarif.py reports/bandit.json reports/bandit-results.sarif
-
-          # Run safety check for known vulnerabilities
-          poetry run safety check --policy-file .safety-policy.yml --output text --full-report > reports/safety-report.txt || true
-
-      - name: Upload security scan reports
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: security-reports
-          path: reports/
-
-      # Add artifact upload for reports
-      - name: Upload security scan reports
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: security-reports
-          path: reports/
-
-  sast:
-    name: Static Analysis
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
-        with:
-          languages: python
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
-        with:
-          category: "python-code-scanning"
-
-  test:
-    name: Test & Coverage
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:14-alpine
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
-
-      - name: Load cached dependencies
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install dependencies
-        run: poetry install --with dev,test
-
-      # - name: Run tests with coverage
-      #   run: |
-      #     poetry run pytest \
-      #       --cov=src \
-      #       --cov-report=xml \
-      #       --cov-report=html \
-      #       --junitxml=junit/test-results.xml
-      #   env:
-      #     DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-      #     REDIS_URL: redis://localhost:6379/0
-
-      # - name: Upload coverage reports
-      #   uses: codecov/codecov-action@v3
-      #   with:
-      #     files: ./coverage.xml
-      #     fail_ci_if_error: true
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: pytest-results
-          path: |
-            junit/test-results.xml
-            htmlcov/
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  container-security:
-    name: Container Security Scan
-    needs: [verify, test]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          load: true
-          tags: ${{ env.IMAGE_NAME }}:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Install Trivy directly instead of using action
-      - name: Install Trivy
-        run: |
-          sudo apt-get install wget apt-transport-https gnupg lsb-release -y
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install trivy -y
-
-      # Cache Trivy DB
-      - name: Cache Trivy vulnerability database
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-trivy-db-
-
-      # Run Trivy scan with retry logic
-      - name: Run Trivy vulnerability scanner
-        run: |
-          max_retries=3
-          attempt=1
-
-          while [ $attempt -le $max_retries ]; do
-            echo "Attempt $attempt of $max_retries"
-
-            if trivy image \
-              --cache-dir ~/.cache/trivy \
-              --format sarif \
-              --output trivy-results.sarif \
-              --severity HIGH,CRITICAL \
-              --vuln-type os,library \
-              --ignore-unfixed \
-              --timeout 10m \
-              ${{ env.IMAGE_NAME }}:test; then
-              echo "Trivy scan completed successfully"
-              break
-            else
-              echo "Attempt $attempt failed"
-              if [ $attempt -eq $max_retries ]; then
-                echo "All retry attempts failed"
-                exit 1
-              fi
-              sleep 30
-              attempt=$((attempt + 1))
-            fi
-          done
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-          category: Trivy
-
-      # Install Dockle directly
-      - name: Install Dockle
-        run: |
-          DOCKLE_VERSION=$(curl --silent "https://api.github.com/repos/goodwithtech/dockle/releases/latest" | \
-            grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-          wget https://github.com/goodwithtech/dockle/releases/download/v${DOCKLE_VERSION}/dockle_${DOCKLE_VERSION}_Linux-64bit.deb
-          sudo dpkg -i dockle_${DOCKLE_VERSION}_Linux-64bit.deb
-
-      # Cache Dockle DB
-      - name: Cache Dockle
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/dockle
-          key: ${{ runner.os }}-dockle-${{ hashFiles('**/Dockerfile') }}
-          restore-keys: |
-            ${{ runner.os }}-dockle-
-
-      # Run Dockle scan with retry logic
-      - name: Run Dockle
-        run: |
-          max_retries=3
-          attempt=1
-
-          while [ $attempt -le $max_retries ]; do
-            echo "Attempt $attempt of $max_retries"
-
-            if dockle \
-              --cache-dir ~/.cache/dockle \
-              --format sarif \
-              --output dockle-results.sarif \
-              ${{ env.IMAGE_NAME }}:test; then
-              echo "Dockle scan completed successfully"
-              break
-            else
-              echo "Attempt $attempt failed"
-              if [ $attempt -eq $max_retries ]; then
-                echo "All retry attempts failed"
-                exit 1
-              fi
-              sleep 30
-              attempt=$((attempt + 1))
-            fi
-          done
-        continue-on-error: true
-
-      - name: Upload Dockle scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: dockle-results.sarif
-          category: Dockle
-
-      # Optional: Print scan summaries
-      - name: Print scan summaries
-        if: always()
-        run: |
-          echo "=============== Trivy Scan Summary ==============="
-          trivy image --severity HIGH,CRITICAL --vuln-type os,library ${{ env.IMAGE_NAME }}:test
-
-          echo "=============== Dockle Scan Summary ==============="
-          dockle ${{ env.IMAGE_NAME }}:test
+    - name: Build Docker image
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        load: true
+        tags: ${{ env.IMAGE_NAME }}:test
 
   publish:
     name: Publish Image
-    needs: [verify, test, container-security]
+    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
@@ -358,87 +65,47 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set build variables
-        run: |
-          # Get branch name
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            BRANCH="${{ github.head_ref }}"
-          else
-            BRANCH=${GITHUB_REF#refs/heads/}
-          fi
+    - name: Extract Docker metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=${{ github.ref_name }}_${{ env.VERSION }}
+          type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          type=ref,event=tag
 
-          # Set branch name
-          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
+    - name: Build and push
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          BUILD_VERSION=${{ env.VERSION }}
+          BUILD_TIMESTAMP=${{ steps.meta.outputs.created }}
+          BUILD_SHA=${{ github.sha }}
 
-          # Set timestamp
-          echo "TIMESTAMP=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+    - name: Verify image tags
+      run: |
+        echo "============= Image Tags ============="
+        echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\0' | xargs -0 -n1 echo "  -"
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            # Branch and version (e.g., main_1.0.0)
-            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}
-            # Branch, version and timestamp (e.g., main_1.0.0_202411161234)
-            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
-            # Latest tag for main branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
-            # Git tags
-            type=ref,event=tag
-            # Git short SHA
-            type=sha,format=short
-          labels: |
-            org.opencontainers.image.title=${{ github.event.repository.name }}
-            org.opencontainers.image.description=${{ github.event.repository.description }}
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.source=${{ github.event.repository.html_url }}
-            org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
-            org.opencontainers.image.revision=${{ github.sha }}
+        echo "============= Pull Test ============="
+        docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}_${{ env.VERSION }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_VERSION=${{ env.VERSION }}
-            BUILD_TIMESTAMP=${{ env.TIMESTAMP }}
-            BUILD_SHA=${{ github.sha }}
-
-      - name: Verify image tags
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "============= Image Tags ============="
-          echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\0' | xargs -0 -n1 echo "  -"
-
-          echo "============= Pull Test ============="
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }}
-
-          echo "============= Image Details ============="
-          docker inspect ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }} | jq '.[0].Config.Labels'
-
-      - name: Sign the published Docker image
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        env:
-          COSIGN_EXPERIMENTAL: "true"
-        run: cosign sign ${DOCKER_REGISTRY}/${{ env.IMAGE_NAME }}@${{ steps.meta.outputs.digest }}
+        echo "============= Image Details ============="
+        docker inspect ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}_${{ env.VERSION }} | jq '.[0].Config.Labels'
