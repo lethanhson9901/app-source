@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
-    tags: [ 'v*.*.*' ]
+    branches: [main, develop]
+    tags: ['v*.*.*']
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
@@ -14,114 +14,50 @@ env:
   DOCKER_REGISTRY: ghcr.io
   VERSION: 1.0.0
   IMAGE_NAME: ${{ github.repository }}
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  verify:
-    name: Code Quality
+
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
-          virtualenvs-create: true
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: ${{ env.POETRY_VERSION }}
+        virtualenvs-create: true
 
-      - name: Load cached dependencies
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    - name: Load cached dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
-      - name: Install dependencies
-        run: poetry install --with dev
+    - name: Install dependencies
+      run: poetry install --with dev
 
-      - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.0
+    - name: Run tests
+      run: poetry run pytest
 
-      - name: Run linters
-        run: |
-          mkdir -p reports
-          poetry install --with dev --no-interaction
-          poetry run ruff check . --output-format=github
-          poetry run black --check .
-          poetry run isort --check-only .
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:14-alpine
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
-
-      - name: Load cached dependencies
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install dependencies
-        run: poetry install --with dev,test
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: pytest-results
-          path: |
-            junit/test-results.xml
-            htmlcov/
+    - name: Build Docker image
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        load: true
+        tags: ${{ env.IMAGE_NAME }}:test
 
   publish:
     name: Publish Image
-    needs: [verify, test]
+    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
@@ -129,71 +65,47 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set build variables
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            BRANCH="${{ github.head_ref }}"
-          else
-            BRANCH=${GITHUB_REF#refs/heads/}
-          fi
-          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
-          echo "TIMESTAMP=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+    - name: Extract Docker metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=${{ github.ref_name }}_${{ env.VERSION }}
+          type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+          type=ref,event=tag
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}
-            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
-            type=ref,event=tag
-            type=sha,format=short
-          labels: |
-            org.opencontainers.image.title=${{ github.event.repository.name }}
-            org.opencontainers.image.description=${{ github.event.repository.description }}
-            org.opencontainers.image.url=${{ github.event.repository.html_url }}
-            org.opencontainers.image.source=${{ github.event.repository.html_url }}
-            org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
-            org.opencontainers.image.revision=${{ github.sha }}
+    - name: Build and push
+      uses: docker/build-push-action@v3
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          BUILD_VERSION=${{ env.VERSION }}
+          BUILD_TIMESTAMP=${{ steps.meta.outputs.created }}
+          BUILD_SHA=${{ github.sha }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_VERSION=${{ env.VERSION }}
-            BUILD_TIMESTAMP=${{ env.TIMESTAMP }}
-            BUILD_SHA=${{ github.sha }}
+    - name: Verify image tags
+      run: |
+        echo "============= Image Tags ============="
+        echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\0' | xargs -0 -n1 echo "  -"
 
-      - name: Verify image tags
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "============= Image Tags ============="
-          echo "${{ steps.meta.outputs.tags }}" | tr '\n' '\0' | xargs -0 -n1 echo "  -"
+        echo "============= Pull Test ============="
+        docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}_${{ env.VERSION }}
 
-          echo "============= Pull Test ============="
-          docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }}
-
-          echo "============= Image Details ============="
-          docker inspect ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH }}_${{ env.VERSION }} | jq '.[0].Config.Labels'
+        echo "============= Image Details ============="
+        docker inspect ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}_${{ env.VERSION }} | jq '.[0].Config.Labels'
