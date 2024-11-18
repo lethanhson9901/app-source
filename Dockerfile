@@ -54,6 +54,9 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=${PORT} \
     PATH="/usr/local/bin:$PATH"
 
+# Set the nameserver to 8.8.8.8
+RUN echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+
 # Install runtime dependencies and create user in a single layer
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \

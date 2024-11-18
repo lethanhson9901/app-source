@@ -1,0 +1,190 @@
+# .github/workflows/ci.yml
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 0 * * *'  # Daily security scans
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  POETRY_VERSION: '1.7.0'
+  DOCKER_REGISTRY: ghcr.io
+  VERSION: ${{ github.event.release.tag_name || '1.0.0' }}
+  IMAGE_NAME: ${{ github.repository }}
+  SCAN_SEVERITY: 'CRITICAL,HIGH'
+  MIN_CODE_COVERAGE: 80
+  MAX_TIMEOUT: 10m
+
+permissions:
+  contents: read
+  security-events: write
+  packages: write
+  id-token: write # For signing
+
+jobs:
+  security-gates:
+    name: Security Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Secrets Scanning
+      - name: TruffleHog Secrets Scan
+        uses: trufflesecurity/trufflehog-actions-scan@master
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      # License Compliance
+      - name: License Compliance Check
+        uses: fossas/fossa-action@main
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+
+      # SBOM Generation
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          artifact-name: sbom.spdx.json
+
+  code-quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python with caching
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'poetry.lock'
+
+      # Quality Gates
+      - name: Run Quality Checks
+        run: |
+          poetry run black --check .
+          poetry run ruff check .
+          poetry run mypy .
+
+      # Security Scans with Metadata
+      - name: Run Security Scans
+        run: |
+          poetry run bandit -r . -f json -o bandit-results.json
+          poetry run safety check --full-report --json > safety-results.json
+
+      # SonarQube Analysis
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.python.bandit.reportPaths=bandit-results.json
+            -Dsonar.python.flake8.reportPaths=flake8-results.json
+
+  container-security:
+    name: Container Security
+    needs: [security-gates, code-quality]
+    runs-on: ubuntu-latest
+    steps:
+      # Enhanced Container Scanning
+      - name: Container Security Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          format: 'table,sarif'
+          output: 'trivy-results.sarif'
+          severity: ${{ env.SCAN_SEVERITY }}
+          timeout: ${{ env.MAX_TIMEOUT }}
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+
+      # Compliance Scanning
+      - name: Run Compliance Scan
+        run: |
+          dockle --config-file .dockleignore \
+                 --format json \
+                 --output dockle-results.json \
+                 ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+
+  performance:
+    name: Performance Testing
+    needs: [container-security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run K6 Load Tests
+        uses: grafana/k6-action@v0.3.0
+        with:
+          filename: performance/load-test.js
+          flags: --vus 10 --duration 30s
+
+      - name: Run Integration Tests
+        run: |
+          poetry run pytest tests/integration \
+            --junitxml=junit/test-results.xml \
+            --cov=src \
+            --cov-report=xml \
+            --cov-fail-under=${{ env.MIN_CODE_COVERAGE }}
+
+  publish:
+    name: Publish Artifacts
+    needs: [performance]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      # Sign and Publish
+      - name: Sign Container Image
+        uses: sigstore/cosign-installer@main
+        with:
+          cosign-release: 'v2.1.1'
+
+      - name: Login to Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publish with Signatures
+      - name: Build and Push
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          provenance: true
+          sbom: true
+
+      - name: Sign Image
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+  notify:
+    name: Notifications
+    needs: [publish]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
