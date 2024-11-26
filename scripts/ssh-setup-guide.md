@@ -1,3 +1,31 @@
+Để giải thích quá trình SSH một cách đơn giản và dễ hiểu:
+
+1. Tạo Khóa (trên máy Windows):
+- Máy Windows tạo ra một cặp khóa: khóa riêng (private key) và khóa công khai (public key)
+- Giống như bạn có một ổ khóa (public key) và chìa khóa (private key)
+- Khóa riêng giữ kín trên máy Windows
+- Khóa công khai sẽ gửi cho máy Ubuntu
+
+2. Gửi Khóa (từ Windows sang Ubuntu):
+- Copy khóa công khai (public key) sang máy Ubuntu
+- Lưu vào file authorized_keys trên Ubuntu
+- Giống việc bạn gắn ổ khóa lên cửa nhà (máy Ubuntu)
+
+3. Kết nối SSH:
+- Khi bạn SSH từ Windows vào Ubuntu:
+  + Windows dùng khóa riêng để tạo "chữ ký"
+  + Ubuntu kiểm tra chữ ký bằng khóa công khai
+  + Nếu khớp -> cho phép đăng nhập
+- Giống như bạn dùng chìa khóa (private key) để mở cửa nhà (máy Ubuntu)
+
+Ưu điểm:
+- Không cần nhớ password
+- An toàn hơn password vì dùng mã hóa phức tạp
+- Một lần cài đặt, dùng mãi mãi
+- Dễ quản lý (có thể xóa public key để thu hồi quyền truy cập)
+
+---
+
 # Complete SSH Setup Guide: Windows to Ubuntu
 
 ## Prerequisites
