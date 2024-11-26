@@ -1,4 +1,4 @@
-Okay, để giải thích SSH cho các bạn học sinh cấp 3 hiểu một cách dễ dàng nhất:
+<!-- Okay, để giải thích SSH cho các bạn học sinh cấp 3 hiểu một cách dễ dàng nhất:
 
 Tưởng tượng bạn muốn vào nhà bạn của mình (máy Ubuntu). Có 2 cách:
 
@@ -39,7 +39,7 @@ Tưởng tượng bạn muốn vào nhà bạn của mình (máy Ubuntu). Có 2 
 
 Bạn thấy cách giải thích này có dễ hiểu hơn không? 😊
 
----
+--- -->
 
 
 # Complete SSH Setup Guide: Windows to Ubuntu
