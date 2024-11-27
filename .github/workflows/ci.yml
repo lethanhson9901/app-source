@@ -27,6 +27,7 @@ permissions:
   packages: write
   id-token: write
   checks: write
+  administration: read   # For checking branch protection
 
 jobs:
   verify:
