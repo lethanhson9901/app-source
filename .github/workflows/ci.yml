@@ -21,13 +21,14 @@ env:
   MIN_COVERAGE: 80
   MAX_TIMEOUT: 10m
 
-permissions:
-  contents: read
-  security-events: write
-  packages: write
-  id-token: write
-  checks: write
-  administration: read   # For checking branch protection
+# permissions:
+#   contents: read
+#   security-events: write
+#   packages: write
+#   id-token: write
+#   checks: write
+
+permissions: write-all
 
 jobs:
   verify:
