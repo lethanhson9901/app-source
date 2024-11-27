@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Docker Registry Settings
     GITHUB_USERNAME: str = "lethanhson9901"
     IMAGE_NAME: str = "app-source"
-    IMAGE_TAG: str = "latest"
+    BRANCH: str = "main"
     BUILD_VERSION: str = "1.0.0"
     DOCKER_REGISTRY: str = "ghcr.io"
 

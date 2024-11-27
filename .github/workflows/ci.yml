@@ -506,13 +506,13 @@ jobs:
 
                 cd "${DEPLOY_DIR}"
 
-                # Pull previous version
+                versio # Pull previous version
                 docker compose pull || handle_error "Failed to pull previous version"
 
                 # Stop current version
                 docker compose down || log_message "Warning: Failed to stop current version"
 
-                # Start previous version
+                # Start previousn
                 docker compose up -d || handle_error "Failed to start previous version"
 
                 # Wait for health check
