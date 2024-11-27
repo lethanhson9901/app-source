@@ -453,6 +453,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
 
+    environment:
+      name: production
+      url: https://your-app-url.com
+
     steps:
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
@@ -463,62 +467,130 @@ jobs:
           script: |
             # Set versioned tag
             DOCKER_TAG="${{ env.BRANCH }}_${{ env.VERSION }}"
+            DEPLOY_DIR="~/app-source"
+            DEPLOY_LOG="/var/log/deployments/deploy_$(date +%Y%m%d_%H%M%S).log"
 
-            # Ensure we're in the home directory
-            cd ~
+            # Create deployment log directory
+            sudo mkdir -p /var/log/deployments
+            sudo chown -R $USER:$USER /var/log/deployments
 
-            # Check if directory exists and handle git repository
+            # Function to log messages
+            log_message() {
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$DEPLOY_LOG"
+            }
+
+            # Function to handle errors
+            handle_error() {
+              log_message "ERROR: $1"
+              rollback
+              exit 1
+            }
+
+            # Function to save deployment state
+            save_deployment_state() {
+              echo "$1" > "${DEPLOY_DIR}/${DEPLOY_STATUS_FILE}"
+              echo "$2" > "${DEPLOY_DIR}/${PREVIOUS_VERSION_FILE}"
+            }
+
+            # Function to perform rollback
+            rollback() {
+              if [ -f "${DEPLOY_DIR}/${PREVIOUS_VERSION_FILE}" ]; then
+                local prev_version=$(cat "${DEPLOY_DIR}/${PREVIOUS_VERSION_FILE}")
+                log_message "Rolling back to version: $prev_version"
+
+                # Export variables for docker-compose
+                export DOCKER_REGISTRY="${{ env.DOCKER_REGISTRY }}"
+                export GITHUB_USERNAME="${{ github.repository_owner }}"
+                export IMAGE_NAME="${{ github.event.repository.name }}"
+                export IMAGE_TAG="$prev_version"
+
+                cd "${DEPLOY_DIR}"
+
+                # Pull previous version
+                docker compose pull || handle_error "Failed to pull previous version"
+
+                # Stop current version
+                docker compose down || log_message "Warning: Failed to stop current version"
+
+                # Start previous version
+                docker compose up -d || handle_error "Failed to start previous version"
+
+                # Wait for health check
+                timeout 300 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done' || handle_error "Health check failed after rollback"
+
+                log_message "Rollback completed successfully"
+                save_deployment_state "rolled_back" "$prev_version"
+              else
+                log_message "No previous version found for rollback"
+                exit 1
+              fi
+            }
+
+            # Start deployment
+            log_message "Starting deployment of version: $DOCKER_TAG"
+
+            # Ensure we're in the deployment directory
+            cd ~ || handle_error "Failed to change to home directory"
+
+            # Clone or update repository
             if [ ! -d "app-source" ]; then
-              echo "Cloning repository..."
-              git clone https://github.com/lethanhson9901/app-source.git
+              git clone https://github.com/${{ github.repository }}.git app-source || handle_error "Failed to clone repository"
             fi
 
-            # Change to repository directory
-            cd app-source
+            cd app-source || handle_error "Failed to change to app directory"
 
-            # Store current commit hash
-            OLD_COMMIT=$(git rev-parse HEAD)
+            # Store current state before deployment
+            if [ -f "${DEPLOY_STATUS_FILE}" ]; then
+              current_version=$(docker compose ps -q | xargs docker inspect -f '{{.Config.Image}}' 2>/dev/null || echo "unknown")
+              save_deployment_state "previous" "$current_version"
+            fi
 
             # Fetch latest changes
-            git fetch origin
-
-            # Get the latest commit hash from main
-            LATEST_COMMIT=$(git rev-parse origin/main)
-
-            # If there are changes, reset to latest main
-            if [ "$OLD_COMMIT" != "$LATEST_COMMIT" ]; then
-              echo "Updates found, applying changes..."
-              git reset --hard origin/main
-            else
-              echo "Already at latest version"
-            fi
+            git fetch origin || handle_error "Failed to fetch latest changes"
+            git reset --hard origin/main || handle_error "Failed to reset to latest version"
 
             # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin || handle_error "Failed to login to registry"
 
-            # Update the image tag in docker-compose.yml without modifying other settings
-            sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
+            # Create .env if needed
+            [ -f .env ] || cp .env.example .env
 
-            # Stop existing containers
-            docker compose down
+            # Export environment variables
+            export DOCKER_REGISTRY="${{ env.DOCKER_REGISTRY }}"
+            export GITHUB_USERNAME="${{ github.repository_owner }}"
+            export IMAGE_NAME="${{ github.event.repository.name }}"
+            export IMAGE_TAG="${DOCKER_TAG}"
 
-            # Remove existing images to force new pull
-            docker compose pull --ignore-pull-failures
-            docker image rm $(docker-compose config | grep 'image: ' | awk '{print $2}') || true
+            # Perform deployment
+            log_message "Stopping existing containers"
+            docker compose down --remove-orphans || handle_error "Failed to stop existing containers"
 
-            # Deploy with docker-compose using explicit version tag
-            docker compose up -d --force-recreate --pull always
+            log_message "Cleaning up old images"
+            docker image prune -af
 
-            # Clean up
-            docker system prune -af --volumes
+            log_message "Pulling new images"
+            docker compose pull || handle_error "Failed to pull new images"
 
-            # Wait for health check
-            timeout 300 bash -c 'while ! curl -s http://localhost:8088/health/live; do sleep 5; done'
+            log_message "Starting new containers"
+            docker compose up -d || handle_error "Failed to start new containers"
+
+            # Health check
+            log_message "Performing health check"
+            if timeout 300 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done'; then
+              log_message "Application is healthy"
+              save_deployment_state "success" "$DOCKER_TAG"
+            else
+              handle_error "Health check failed"
+            fi
 
             # Verify deployment
-            # docker compose ps
-            # docker compose logs --tail=50 app
+            docker compose ps || log_message "Warning: Failed to verify deployment status"
 
-            # Print deployed version and git info for verification
-            echo "Deployed version: ${DOCKER_TAG}"
-            echo "Git commit: $(git rev-parse HEAD)"
+            # Print deployment info
+            log_message "Deployed version: ${DOCKER_TAG}"
+            log_message "Git commit: $(git rev-parse HEAD)"
+
+            # Final cleanup
+            docker system prune -af --volumes
+
+            log_message "Deployment completed successfully"
