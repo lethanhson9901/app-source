@@ -500,14 +500,14 @@ jobs:
             sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
 
             # Stop existing containers
-            docker-compose down
+            docker compose down
 
             # Remove existing images to force new pull
-            docker-compose pull --ignore-pull-failures
+            docker compose pull --ignore-pull-failures
             docker image rm $(docker-compose config | grep 'image: ' | awk '{print $2}') || true
 
             # Deploy with docker-compose using explicit version tag
-            docker-compose up -d --force-recreate --pull always
+            docker compose up -d --force-recreate --pull always
 
             # Clean up
             docker system prune -af --volumes
@@ -516,8 +516,8 @@ jobs:
             timeout 300 bash -c 'while ! curl -s http://localhost:8088/health/live; do sleep 5; done'
 
             # Verify deployment
-            docker-compose ps
-            docker-compose logs --tail=50 app
+            # docker compose ps
+            # docker compose logs --tail=50 app
 
             # Print deployed version and git info for verification
             echo "Deployed version: ${DOCKER_TAG}"
