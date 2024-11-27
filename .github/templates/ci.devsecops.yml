@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-name: CI
+name: DevSecOps - CI
 
 on:
   push:
@@ -394,14 +394,18 @@ jobs:
           tags: |
             # Branch and version (e.g., main_1.0.0)
             type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}
+
             # Branch, version and timestamp (e.g., main_1.0.0_202411161234)
-            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
+            # type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
+
             # Latest tag for main branch
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+
             # Git tags
-            type=ref,event=tag
+            # type=ref,event=tag
+
             # Git short SHA
-            type=sha,format=short
+            # type=sha,format=short
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
