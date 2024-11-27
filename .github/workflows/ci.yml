@@ -42,6 +42,8 @@ jobs:
 
       - name: Repository Checks
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Check if required files exist
           for file in Dockerfile pyproject.toml README.md; do
