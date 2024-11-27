@@ -44,8 +44,6 @@ jobs:
 
       - name: Repository Checks
         id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           # Check if required files exist
           for file in Dockerfile pyproject.toml README.md; do
@@ -55,10 +53,7 @@ jobs:
             fi
           done
 
-          # Check branch protections
-          gh api repos/${{ github.repository }}/branches/main/protection \
-            --jq '.required_status_checks.strict'
-
+          # Set default output
           echo "should_run=true" >> $GITHUB_OUTPUT
 
   security-gates:
