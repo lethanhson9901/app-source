@@ -1,0 +1,50 @@
+config:
+  target: "https://api.your-app.com"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: Warm up
+    - duration: 120
+      arrivalRate: 5
+      rampTo: 50
+      name: Ramp up
+    - duration: 180
+      arrivalRate: 50
+      name: Sustained load
+    - duration: 60
+      arrivalRate: 50
+      rampTo: 5
+      name: Ramp down
+
+  defaults:
+    headers:
+      x-api-key: "{{ $processEnvironment.API_KEY }}"
+      Content-Type: "application/json"
+
+  apdex:
+    threshold: 100
+
+  ensure:
+    p95: 200
+    maxErrorRate: 1
+
+scenarios:
+  - name: "API Flow"
+    weight: 7
+    flow:
+      - get:
+          url: "/api/health"
+          expect:
+            - statusCode: 200
+
+      - think: 2
+
+      - post:
+          url: "/api/data"
+          json:
+            key: "value"
+          capture:
+            # Add your capture configuration here
+            # For example:
+            # - json: "$.id"
+            #   as: "dataId"

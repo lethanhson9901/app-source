@@ -37,6 +37,13 @@ def get_default_host() -> str:
 
 
 class Settings(BaseSettings):
+    # Docker Registry Settings
+    GITHUB_USERNAME: str = "lethanhson9901"
+    IMAGE_NAME: str = "app-source"
+    IMAGE_TAG: str = "latest"
+    BUILD_VERSION: str = "1.0.0"
+    DOCKER_REGISTRY: str = "ghcr.io"
+
     #######################################
     # Core Application Settings
     #######################################
@@ -142,6 +149,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = find_env_file()
         case_sensitive = True
+        extra = "allow"  # Allow extra fields from env file
 
         @classmethod
         def parse_env_var(

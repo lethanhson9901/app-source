@@ -1,6 +1,8 @@
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
@@ -10,6 +12,7 @@ from .middleware import LoggingMiddleware, MetricsMiddleware
 
 logger = structlog.get_logger(__name__)
 tracer = trace.get_tracer(__name__)
+templates = Jinja2Templates(directory="src/app/templates")
 
 
 def create_app() -> FastAPI:
@@ -17,7 +20,6 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME, version=settings.APP_VERSION, debug=settings.APP_DEBUG
     )
 
-    # Middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ALLOWED_ORIGINS,
@@ -28,20 +30,18 @@ def create_app() -> FastAPI:
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(LoggingMiddleware)
 
-    # Routers
+    app.mount("/static", StaticFiles(directory="src/app/static"), name="static")
+
     app.include_router(health.router)
     app.include_router(views.router)
 
-    # Telemetry
     FastAPIInstrumentor.instrument_app(app)
 
     @app.get("/")
-    async def root():
-        return {
-            "name": settings.APP_NAME,
-            "version": settings.APP_VERSION,
-            "environment": settings.APP_ENVIRONMENT,
-        }
+    async def root(request: Request):
+        return templates.TemplateResponse(
+            "index.html", {"request": request, "settings": settings}
+        )
 
     return app
 

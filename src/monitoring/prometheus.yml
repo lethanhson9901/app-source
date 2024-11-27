@@ -1,42 +1,13 @@
-# app-source/src/monitoring/prometheus.yml
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-rule_files:
-  - "alert.rules"
-
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-          - alertmanager:9093
-
 scrape_configs:
   - job_name: 'python-app'
-    kubernetes_sd_configs:
-      - role: pod
-        namespaces:
-          names:
-            - default
-            - prod
-            - staging
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_label_app]
-        regex: python-app
-        action: keep
-      - source_labels: [__meta_kubernetes_pod_name]
-        target_label: pod
-      - source_labels: [__meta_kubernetes_namespace]
-        target_label: namespace
-
-  - job_name: 'kube-state-metrics'
     static_configs:
-      - targets: ['kube-state-metrics:8080']
+      - targets: ['app:8080']
+    metrics_path: '/metrics'
 
-  - job_name: 'node-exporter'
-    kubernetes_sd_configs:
-      - role: node
-    relabel_configs:
-      - source_labels: [__meta_kubernetes_node_name]
-        target_label: node
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
