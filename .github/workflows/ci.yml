@@ -564,7 +564,7 @@ jobs:
 
             # Remove existing images to force new pull
             # docker compose pull --ignore-pull-failures
-            docker image rm $(docker-compose config | grep 'image: ' | awk '{print $2}') || true
+            docker image rm $(docker compose config | grep 'image: ' | awk '{print $2}') || true
 
             # Deploy with docker-compose using explicit version tag
             docker compose up -d
