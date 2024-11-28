@@ -1,5 +1,3 @@
-version: '3.8'
-
 x-logging: &default-logging
   driver: "json-file"
   options:
@@ -14,14 +12,8 @@ x-healthcheck: &default-healthcheck
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        - BUILD_VERSION=${BUILD_VERSION:-latest}
-    # image: ${DOCKER_REGISTRY:-ghcr.io}/${GITHUB_USERNAME:-lethanhson9901}/${IMAGE_NAME:-app-source}:${BRANCH:-main}_${BUILD_VERSION:-1.0.0}
     image: ghcr.io/lethanhson9901/app-source:main_1.0.0
-    pull_policy: always  # Changed to always pull
+    pull_policy: always
     container_name: python-app
     env_file: .env
     environment:
