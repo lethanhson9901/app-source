@@ -165,7 +165,7 @@ function ItemsManager() {
         <div className="min-h-screen py-12 px-4 sm:px-6">
             <div className="max-w-5xl mx-auto">
                 <div className="text-center mb-12">
-                    <h1 className="text-4xl font-bold gradient-text mb-2">Item Manager 2</h1>
+                    <h1 className="text-4xl font-bold gradient-text mb-2">Item Manager</h1>
                 </div>
 
                 <div className="glassmorphism rounded-2xl p-8 mb-12">
