@@ -571,7 +571,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*Status:* Successfully deployed to production\n*Deployment URL:* https://your-app-url.com"
+                    "text": "*Status:* Successfully deployed to production\n*Deployment URL:* http://ec2-18-142-237-255.ap-southeast-1.compute.amazonaws.com"
                   }
                 },
                 {
