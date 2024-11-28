@@ -535,12 +535,13 @@ jobs:
 
             # Change to repository directory
             cd app-source
+            cp .env.example .env
 
             # Store current commit hash
             OLD_COMMIT=$(git rev-parse HEAD)
 
             # Fetch latest changes
-            git fetch origin
+            git pull
 
             # Get the latest commit hash from main
             LATEST_COMMIT=$(git rev-parse origin/main)
@@ -557,7 +558,7 @@ jobs:
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Update the image tag in docker-compose.yml without modifying other settings
-            sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
+            # sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
 
             # Stop existing containers
             docker compose down
