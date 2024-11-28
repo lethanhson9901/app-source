@@ -184,13 +184,68 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # [Your updated deployment script here]
             # Set versioned tag
             DOCKER_TAG="${{ env.BRANCH }}_${{ env.VERSION }}"
-            DEPLOY_DIR="~/app-source"
-            DEPLOY_LOG="/var/log/deployments/deploy_$(date +%Y%m%d_%H%M%S).log"
 
-            # [Rest of your deployment script]
+            # Ensure we're in the home directory
+            cd ~
+
+            # Check if directory exists and handle git repository
+            if [ ! -d "app-source" ]; then
+              echo "Cloning repository..."
+              git clone https://github.com/lethanhson9901/app-source.git
+            fi
+
+            # Change to repository directory
+            cd app-source
+            cp .env.example .env
+
+            # Store current commit hash
+            OLD_COMMIT=$(git rev-parse HEAD)
+
+            # Fetch latest changes
+            git pull
+
+            # Get the latest commit hash from main
+            LATEST_COMMIT=$(git rev-parse origin/main)
+
+            # If there are changes, reset to latest main
+            if [ "$OLD_COMMIT" != "$LATEST_COMMIT" ]; then
+              echo "Updates found, applying changes..."
+              git reset --hard origin/main
+            else
+              echo "Already at latest version"
+            fi
+
+            # Login to GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Update the image tag in docker-compose.yml without modifying other settings
+            # sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
+
+            # Stop existing containers
+            docker compose down
+
+            # Remove existing images to force new pull
+            # docker compose pull --ignore-pull-failures
+            # docker image rm $(docker compose config | grep 'image: ' | awk '{print $2}') || true
+
+            # Deploy with docker-compose using explicit version tag
+            docker compose up -d
+
+            # Clean up
+            # docker system prune -af --volumes
+
+            # Wait for health check
+            timeout 30 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done'
+
+            # Verify deployment
+            # docker compose ps
+            # docker compose logs --tail=50 app
+
+            # Print deployed version and git info for verification
+            echo "Deployed version: ${DOCKER_TAG}"
+            echo "Git commit: $(git rev-parse HEAD)"
 
       - name: Notify deployment success
         if: success()
