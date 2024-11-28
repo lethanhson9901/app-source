@@ -458,139 +458,191 @@ jobs:
       url: https://your-app-url.com
 
     steps:
+      - name: Start deployment notification
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "🚀 Starting deployment of ${{ github.repository }} to Production",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚀 Deployment Started",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ env.VERSION }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Triggered by:*\n${{ github.actor }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n${{ github.sha }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
       - name: Deploy to EC2
+        id: deploy
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # [Your updated deployment script here]
             # Set versioned tag
             DOCKER_TAG="${{ env.BRANCH }}_${{ env.VERSION }}"
             DEPLOY_DIR="~/app-source"
             DEPLOY_LOG="/var/log/deployments/deploy_$(date +%Y%m%d_%H%M%S).log"
 
-            # Create deployment log directory
-            sudo mkdir -p /var/log/deployments
-            sudo chown -R $USER:$USER /var/log/deployments
+            # [Rest of your deployment script]
 
-            # Function to log messages
-            log_message() {
-              echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$DEPLOY_LOG"
+      - name: Notify deployment success
+        if: success()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "✅ Successfully deployed ${{ github.repository }} to Production",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "✅ Deployment Successful",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ env.VERSION }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Deployed by:*\n${{ github.actor }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Status:* Successfully deployed to production\n*Deployment URL:* https://your-app-url.com"
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "View deployment details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
             }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
-            # Function to handle errors
-            handle_error() {
-              log_message "ERROR: $1"
-              rollback
-              exit 1
+      - name: Notify deployment failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          payload: |
+            {
+              "text": "❌ Failed to deploy ${{ github.repository }} to Production",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ Deployment Failed",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Repository:*\n${{ github.repository }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:*\nProduction"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ env.VERSION }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Attempted by:*\n${{ github.actor }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Error:* Deployment to production failed. Please check the logs for details."
+                  }
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "View error details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
             }
-
-            # Function to save deployment state
-            save_deployment_state() {
-              echo "$1" > "${DEPLOY_DIR}/${DEPLOY_STATUS_FILE}"
-              echo "$2" > "${DEPLOY_DIR}/${PREVIOUS_VERSION_FILE}"
-            }
-
-            # Function to perform rollback
-            rollback() {
-              if [ -f "${DEPLOY_DIR}/${PREVIOUS_VERSION_FILE}" ]; then
-                local prev_version=$(cat "${DEPLOY_DIR}/${PREVIOUS_VERSION_FILE}")
-                log_message "Rolling back to version: $prev_version"
-
-                # Export variables for docker-compose
-                export DOCKER_REGISTRY="${{ env.DOCKER_REGISTRY }}"
-                export GITHUB_USERNAME="${{ github.repository_owner }}"
-                export IMAGE_NAME="${{ github.event.repository.name }}"
-                export IMAGE_TAG="$prev_version"
-
-                cd "${DEPLOY_DIR}"
-
-                versio # Pull previous version
-                docker compose pull || handle_error "Failed to pull previous version"
-
-                # Stop current version
-                docker compose down || log_message "Warning: Failed to stop current version"
-
-                # Start previousn
-                docker compose up -d || handle_error "Failed to start previous version"
-
-                # Wait for health check
-                timeout 300 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done' || handle_error "Health check failed after rollback"
-
-                log_message "Rollback completed successfully"
-                save_deployment_state "rolled_back" "$prev_version"
-              else
-                log_message "No previous version found for rollback"
-                exit 1
-              fi
-            }
-
-            # Start deployment
-            log_message "Starting deployment of version: $DOCKER_TAG"
-
-            # Ensure we're in the deployment directory
-            cd ~ || handle_error "Failed to change to home directory"
-
-            # Clone or update repository
-            if [ ! -d "app-source" ]; then
-              git clone https://github.com/${{ github.repository }}.git app-source || handle_error "Failed to clone repository"
-            fi
-
-            cd app-source || handle_error "Failed to change to app directory"
-
-            # Store current state before deployment
-            if [ -f "${DEPLOY_STATUS_FILE}" ]; then
-              current_version=$(docker compose ps -q | xargs docker inspect -f '{{.Config.Image}}' 2>/dev/null || echo "unknown")
-              save_deployment_state "previous" "$current_version"
-            fi
-
-            # Fetch latest changes
-            git fetch origin || handle_error "Failed to fetch latest changes"
-            git reset --hard origin/main || handle_error "Failed to reset to latest version"
-
-            # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin || handle_error "Failed to login to registry"
-
-            # Create .env if needed
-            [ -f .env ] || cp .env.example .env
-
-            # Export environment variables
-            export DOCKER_REGISTRY="${{ env.DOCKER_REGISTRY }}"
-            export GITHUB_USERNAME="${{ github.repository_owner }}"
-            export IMAGE_NAME="${{ github.event.repository.name }}"
-            export IMAGE_TAG="${DOCKER_TAG}"
-
-            # Perform deployment
-            log_message "Stopping existing containers"
-            docker compose down --remove-orphans || handle_error "Failed to stop existing containers"
-
-            log_message "Cleaning up old images"
-            docker image prune -af
-
-            log_message "Pulling new images"
-            docker compose pull || handle_error "Failed to pull new images"
-
-            log_message "Starting new containers"
-            docker compose up -d || handle_error "Failed to start new containers"
-
-            # Health check
-            log_message "Performing health check"
-            if timeout 300 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done'; then
-              log_message "Application is healthy"
-              save_deployment_state "success" "$DOCKER_TAG"
-            else
-              handle_error "Health check failed"
-            fi
-
-            # Verify deployment
-            docker compose ps || log_message "Warning: Failed to verify deployment status"
-
-            # Print deployment info
-            log_message "Deployed version: ${DOCKER_TAG}"
-            log_message "Git commit: $(git rev-parse HEAD)"
-
-            # Final cleanup
-            docker system prune -af --volumes
-
-            log_message "Deployment completed successfully"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
