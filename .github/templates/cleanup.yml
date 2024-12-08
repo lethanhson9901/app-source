@@ -1,7 +1,7 @@
-name: Cleanup Container Images
+name: Test CI Cleanup
 
 on:
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:  # Manual trigger
   push:
     branches:
       - '*'
@@ -9,7 +9,6 @@ on:
 jobs:
   cleanup:
     name: Cleanup Container Images
-    needs: [publish]
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -26,32 +25,43 @@ jobs:
       - name: Get package versions
         id: get-versions
         run: |
-          VERSIONS=$(gh api \
+          echo "Current package versions before cleanup:"
+          gh api \
             -H "Accept: application/vnd.github+json" \
             /user/packages/container/app-source/versions \
-            --jq '[.[] | select(.metadata.container.tags | length == 0) | .id] | join(",")')
-          echo "package_versions=$VERSIONS" >> $GITHUB_OUTPUT
+            --jq '.[].metadata.container.tags'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Delete untagged versions safely
       - name: Delete untagged versions
         uses: actions/delete-package-versions@v4
-        continue-on-error: true  # Continue even if some versions can't be deleted
+        continue-on-error: true
         with:
           package-name: 'app-source'
           package-type: 'container'
           token: ${{ secrets.GITHUB_TOKEN }}
-          delete-only-untagged-versions: true  # Only delete versions without tags
+          delete-only-untagged-versions: true
           min-versions-to-keep: 0
 
       # Keep only recent tagged versions
       - name: Clean up old tagged versions
         uses: actions/delete-package-versions@v4
-        continue-on-error: true  # Continue even if some versions can't be deleted
+        continue-on-error: true
         with:
           package-name: 'app-source'
           package-type: 'container'
           token: ${{ secrets.GITHUB_TOKEN }}
-          min-versions-to-keep: 5  # Keep the 5 most recent versions
-          delete-only-untagged-versions: false  # Include tagged versions
+          min-versions-to-keep: 5
+          delete-only-untagged-versions: false
+
+      # List remaining versions
+      - name: List remaining versions
+        run: |
+          echo "Remaining package versions after cleanup:"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            /user/packages/container/app-source/versions \
+            --jq '.[].metadata.container.tags'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

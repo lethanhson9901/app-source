@@ -459,6 +459,8 @@ jobs:
         run: cosign sign ${DOCKER_REGISTRY}/${{ env.IMAGE_NAME }}@${{ steps.meta.outputs.digest }}
 
   cleanup:
+    name: Cleanup Container Images
+    needs: [publish]  # This ensures cleanup runs after successful publishing
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -467,38 +469,51 @@ jobs:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Delete sha256 prefixed images
-        uses: actions/delete-package-versions@v4
-        with:
-          package-name: 'app-source'
-          package-type: 'container'
-          min-versions-to-keep: 0
-          delete-only-untagged-versions: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          filters: |
-            [
-              {
-                "type": "name",
-                "pattern": "^sha256:"
-              }
-            ]
+      # First list all package versions
+      - name: Get package versions
+        id: get-versions
+        run: |
+          echo "Current package versions before cleanup:"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            /user/packages/container/app-source/versions \
+            --jq '.[].metadata.container.tags'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Keep only latest 5 tagged images
+      # Delete untagged versions safely
+      - name: Delete untagged versions
         uses: actions/delete-package-versions@v4
+        continue-on-error: true
         with:
           package-name: 'app-source'
           package-type: 'container'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-only-untagged-versions: true
+          min-versions-to-keep: 0
+
+      # Keep only recent tagged versions
+      - name: Clean up old tagged versions
+        uses: actions/delete-package-versions@v4
+        continue-on-error: true
+        with:
+          package-name: 'app-source'
+          package-type: 'container'
+          token: ${{ secrets.GITHUB_TOKEN }}
           min-versions-to-keep: 5
           delete-only-untagged-versions: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          filters: |
-            [
-              {
-                "type": "name",
-                "pattern": "^(?!sha256:).*$"
-              }
-            ]
+
+      # List remaining versions
+      - name: List remaining versions
+        run: |
+          echo "Remaining package versions after cleanup:"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            /user/packages/container/app-source/versions \
+            --jq '.[].metadata.container.tags'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
