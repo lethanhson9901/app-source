@@ -450,6 +450,26 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
         run: cosign sign ${DOCKER_REGISTRY}/${{ env.IMAGE_NAME }}@${{ steps.meta.outputs.digest }}
 
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    # Run after publish job to ensure we don't delete images we just created
+    needs: [publish]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      packages: write
+
+    steps:
+      - name: Delete old container images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: 'container'
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          age: '3'
+
   # deploy:
   #   name: Deploy to EC2
   #   needs: [publish]
