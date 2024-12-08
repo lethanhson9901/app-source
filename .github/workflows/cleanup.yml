@@ -20,7 +20,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Delete failed workflow run images
+      - name: Delete sha256 prefixed images
         uses: actions/delete-package-versions@v4
         with:
           package-name: 'app-source'
@@ -31,14 +31,12 @@ jobs:
           filters: |
             [
               {
-                "type": "metadata",
-                "field": "workflow_conclusion",
-                "pattern": "^failure$"
+                "type": "name",
+                "pattern": "^sha256:"
               }
             ]
 
-
-      - name: Keep only latest 5 successful images
+      - name: Keep only latest 5 tagged images
         uses: actions/delete-package-versions@v4
         with:
           package-name: 'app-source'
@@ -49,8 +47,7 @@ jobs:
           filters: |
             [
               {
-                "type": "metadata",
-                "field": "workflow_conclusion",
-                "pattern": "^success$"
+                "type": "name",
+                "pattern": "^(?!sha256:).*$"
               }
             ]

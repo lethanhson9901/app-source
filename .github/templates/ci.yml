@@ -459,17 +459,46 @@ jobs:
         run: cosign sign ${DOCKER_REGISTRY}/${{ env.IMAGE_NAME }}@${{ steps.meta.outputs.digest }}
 
   cleanup:
-    name: Cleanup Old Images
     runs-on: ubuntu-latest
     permissions:
       packages: write
 
     steps:
-      - name: Delete old container images
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete sha256 prefixed images
         uses: actions/delete-package-versions@v4
         with:
-          package-name: ${{ github.event.repository.name }}
+          package-name: 'app-source'
+          package-type: 'container'
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            [
+              {
+                "type": "name",
+                "pattern": "^sha256:"
+              }
+            ]
+
+      - name: Keep only latest 5 tagged images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: 'app-source'
           package-type: 'container'
           min-versions-to-keep: 5
-          delete-only-untagged-versions: false  # Delete both tagged and untagged images
+          delete-only-untagged-versions: false
           token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            [
+              {
+                "type": "name",
+                "pattern": "^(?!sha256:).*$"
+              }
+            ]
