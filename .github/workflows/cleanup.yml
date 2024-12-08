@@ -1,7 +1,7 @@
 name: Cleanup Old Images
 
 on:
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
   push:
     branches:
       - '*'
@@ -14,11 +14,38 @@ jobs:
       packages: write
 
     steps:
-      - name: Delete old container images
+      - name: Delete failed CI images
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const response = await github.rest.packages.getAllPackageVersions({
+              package_type: 'container',
+              package_name: context.repo.repo,
+              owner: context.repo.owner
+            });
+
+            for (const version of response.data) {
+              // Delete versions with SHA tags (failed CI images)
+              if (version.metadata.container.tags.some(tag => tag.startsWith('sha256:'))) {
+                try {
+                  await github.rest.packages.deletePackageVersion({
+                    package_type: 'container',
+                    package_name: context.repo.repo,
+                    owner: context.repo.owner,
+                    package_version_id: version.id
+                  });
+                  console.log(`Deleted failed CI image version ${version.id}`);
+                } catch (error) {
+                  console.log(`Error deleting version ${version.id}: ${error}`);
+                }
+              }
+            }
+
+      - name: Keep only last 5 images
         uses: actions/delete-package-versions@v4
         with:
           package-name: ${{ github.event.repository.name }}
           package-type: 'container'
           min-versions-to-keep: 5
-          delete-only-untagged-versions: false  # Delete both tagged and untagged images
+          delete-only-untagged-versions: false
           token: ${{ secrets.GITHUB_TOKEN }}
