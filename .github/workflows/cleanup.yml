@@ -38,6 +38,7 @@ jobs:
               }
             ]
 
+
       - name: Keep only latest 5 successful images
         uses: actions/delete-package-versions@v4
         with:
