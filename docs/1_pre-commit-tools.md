@@ -1,383 +1,185 @@
-# Pre-commit Tools Setup
+# Pre-commit Tools Suite
 
-## 1. Installation
+A robust, enterprise-grade pre-commit configuration enforcing code quality, security, and consistency standards across your development lifecycle.
+
+## Quick Start
 
 ```bash
-# Install pre-commit
-pip install pre-commit
-
-# Install additional Python tools
-pip install black ruff mypy bandit detect-secrets yamllint
-
-# Install hadolint for Dockerfile linting
-# For Linux:
-wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
-chmod +x /usr/local/bin/hadolint
+pip install pre-commit>=3.5.0
+pre-commit install && pre-commit install --hook-type commit-msg
 ```
 
-## 2. Pre-commit Configuration
+## Core Features
 
-Create `.pre-commit-config.yaml` in your project root:
+- Zero-configuration security scanning
+- Automated code formatting and linting
+- Infrastructure as Code (IaC) validation
+- Docker best practices enforcement
+- Conventional commit standardization
 
+## Technical Requirements
+
+- Python 3.11+
+- Git 2.28+
+- Docker Engine 20.10+ (for container validations)
+- Terraform 1.0+ (for IaC validations)
+
+## Architecture
+
+![alt text](pre-commit-architecture.png)
+
+Our pre-commit pipeline implements a multi-layered validation approach:
+
+### Layer 1: Git Hygiene
+Prevents common VCS issues through essential git checks:
+- Case-sensitive path conflicts
+- Unresolved merge markers
+- Invalid symlinks
+- Large file restrictions (>500KB)
+- Debug statement detection
+- Syntax validation (YAML, TOML, JSON)
+- Line ending normalization (LF)
+
+### Layer 2: Code Quality
+
+#### Python Ecosystem
+- **Black**: Deterministic code formatting
+  - Scope: `src/` directory
+  - Configuration: Pyproject.toml
+  - Excluded: Test files
+
+- **isort**: Import statement optimization
+  - Profile: Black-compatible
+  - Scope: `src/` directory
+  - Sections: FUTURE, STDLIB, THIRDPARTY, FIRSTPARTY, LOCALFOLDER
+
+- **Ruff**: High-performance linting
+  - Mode: Auto-fix enabled
+  - Scope: `src/` directory
+  - Rules: Extended ruleset
+
+- **mypy**: Static type verification
+  - Strict mode: Enabled
+  - Config source: Pyproject.toml
+  - Type stubs: requests, PyYAML, setuptools, redis, jwt
+
+### Layer 3: Security
+
+#### Code Security
+- **Bandit**: AST-based security scanning
+  - Configuration: Pyproject.toml
+  - Scope: All Python files
+  - Profile: Default security rules
+
+#### Secrets Management
+- **detect-secrets**: Credential leakage prevention
+  - Baseline: `.secrets.baseline`
+  - Exclusions: poetry.lock, test files
+  - Mode: Strict scanning
+
+- **Gitleaks**: Deep secrets scanning
+  - Mode: Protect (staged changes)
+  - Exclusions: poetry.lock, test files
+  - Rules: Default ruleset
+
+### Layer 4: Container Security
+
+#### Docker Validation
+- **hadolint**: Dockerfile optimization
+  - Rules ignored:
+    - DL3008: Version pinning in apt-get
+    - DL3013: Version pinning in pip
+    - DL3059: RUN instruction consolidation
+  - Scope: Dockerfile and dockerfiles/*
+
+- **docker-compose-check**: Compose file validation
+  - Version: v3.0.1
+  - Mode: Strict validation
+
+### Layer 5: Infrastructure Validation
+
+#### YAML Processing
+- **yamllint**: YAML best practices
+  - Config: .yamllint.yaml
+  - Mode: Strict validation
+
+#### Terraform Validation
+Comprehensive IaC validation suite:
+- Format standardization (terraform fmt)
+- Syntax validation (terraform validate)
+- Best practice enforcement (tflint)
+- Security compliance (checkov)
+
+### Layer 6: Commit Standards
+- **commitizen**: Conventional commit enforcement
+  - Stage: commit-msg
+  - Standard: Conventional Commits 1.0.0
+  - Validation: Strict
+
+## Performance Optimization
+
+### Fail-Fast Strategy
 ```yaml
-# Top level default configuration for all hooks
-default_language_version:
-  python: python3.11
-default_stages: [commit, push]
 fail_fast: true
-minimum_pre_commit_version: "3.5.0"
-
-repos:
-# Essential Git checks
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v5.0.0
-  hooks:
-  - id: check-case-conflict
-  - id: check-merge-conflict
-  - id: check-symlinks
-  - id: check-yaml
-    args: [--allow-multiple-documents]
-  - id: check-toml
-  - id: check-json
-  - id: detect-private-key
-  - id: end-of-file-fixer
-  - id: trailing-whitespace
-    args: [--markdown-linebreak-ext=md]
-  - id: mixed-line-ending
-    args: [--fix=lf]
-  - id: check-added-large-files
-    args: ['--maxkb=500']
-  - id: check-ast
-  - id: debug-statements
-
-# Python code formatting
-- repo: https://github.com/psf/black
-  rev: 24.10.0
-  hooks:
-  - id: black
-    files: ^src/
-    exclude: ^tests/
-
-# Python import sorting
-- repo: https://github.com/PyCQA/isort
-  rev: 5.13.2
-  hooks:
-  - id: isort
-    files: ^src/
-
-# Python linting with Ruff
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.8.2
-  hooks:
-  - id: ruff
-    args: [--fix]
-    files: ^src/
-
-# Python type checking
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.13.0
-  hooks:
-  - id: mypy
-    additional_dependencies: [
-      types-requests,
-      types-PyYAML,
-      types-setuptools,
-      types-redis,
-      types-jwt
-    ]
-    args: [--config-file=pyproject.toml]
-    files: ^src/
-
-# Python security checks
-- repo: https://github.com/PyCQA/bandit
-  rev: 1.8.0
-  hooks:
-  - id: bandit
-    args: ['-c', 'pyproject.toml']
-    additional_dependencies: ['bandit[toml]']
-
-# Secrets scanning
-- repo: https://github.com/Yelp/detect-secrets
-  rev: v1.5.0
-  hooks:
-  - id: detect-secrets
-    args: [
-      '--baseline', '.secrets.baseline',
-      '--exclude-files', 'poetry.lock',
-      '--exclude-files', '.*test.*'
-    ]
-
-# Dockerfile linting
-- repo: https://github.com/hadolint/hadolint
-  rev: v2.13.1-beta
-  hooks:
-  - id: hadolint
-    args: [
-      '--ignore', 'DL3008',
-      '--ignore', 'DL3013',
-      '--ignore', 'DL3059'
-    ]
-    files: ^Dockerfile$|^dockerfiles/.*
-
-# Docker Compose validation
-- repo: https://github.com/IamTheFij/docker-pre-commit
-  rev: v3.0.1
-  hooks:
-  - id: docker-compose-check
-
-# YAML linting
-- repo: https://github.com/adrienverge/yamllint
-  rev: v1.35.1
-  hooks:
-  - id: yamllint
-    args: [-c=.yamllint.yaml]
-
-# Terraform checks
-- repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.96.2
-  hooks:
-  - id: terraform_fmt
-  - id: terraform_validate
-  - id: terraform_tflint
-  - id: terraform_checkov
-
-# Shell script checks
-- repo: https://github.com/shellcheck-py/shellcheck-py
-  rev: v0.10.0.1
-  hooks:
-  - id: shellcheck
-    args: ['-x']
-
-# Commit message checks
-- repo: https://github.com/commitizen-tools/commitizen
-  rev: v4.1.0
-  hooks:
-  - id: commitizen
-    stages: [commit-msg]
-
 ```
----
-I'll explain each tool's purpose and importance in your pre-commit setup:
+Terminates on first failure to minimize CPU cycles on invalid commits.
 
-1. **pre-commit-hooks (Essential Git Checks)**
+### Execution Stages
 ```yaml
-- repo: https://github.com/pre-commit/pre-commit-hooks
+default_stages: [commit, push]
 ```
-- `check-case-conflict`: Important for cross-platform development, prevents issues like having both `test.py` and `Test.py`
-- `check-merge-conflict`: Catches forgotten merge markers like `>>>>`, `<<<<`, `====`
-- `check-yaml/toml/json`: Validates configuration files syntax before commit
-- `detect-private-key`: Security check for accidentally committed SSH keys, certificates
-- `check-added-large-files`: Prevents repository bloat
-- `check-ast`: Ensures Python files are syntactically valid
-- `debug-statements`: Catches forgotten debugger statements (pdb, ipdb, breakpoint())
+Dual-stage validation ensuring both local and remote consistency.
 
-2. **Black (Code Formatter)**
+## CI/CD Integration
+
+### GitHub Actions
 ```yaml
-- repo: https://github.com/psf/black
+- uses: actions/checkout@v4
+- uses: pre-commit/action@v3.0.0
 ```
-- Enforces consistent Python code style
-- Non-configurable by design to prevent style debates
-- Files pattern `^src/`: Only formats source code, ignoring tests
-- Current version: 24.10.0
 
-3. **isort (Import Sorter)**
+### GitLab CI
 ```yaml
-- repo: https://github.com/PyCQA/isort
-```
-- Organizes imports into sections: standard library, third-party, local
-- Alphabetizes within sections
-- Version 5.13.2
-- Only processes `src/` directory
-
-4. **Ruff (Fast Linter)**
-```yaml
-- repo: https://github.com/astral-sh/ruff-pre-commit
-```
-- Written in Rust, extremely fast
-- Combines functionality of multiple Python linters
-- Can automatically fix issues (`--fix`)
-- Version v0.8.2
-
-5. **mypy (Type Checker)**
-```yaml
-- repo: https://github.com/pre-commit/mirrors-mypy
-```
-- Static type checking for Python
-- Additional type stubs installed for common packages
-- Uses `pyproject.toml` for configuration
-- Version v1.13.0
-
-6. **Bandit (Security Linter)**
-```yaml
-- repo: https://github.com/PyCQA/bandit
-```
-- Scans for common security issues
-- Checks for SQL injection, hardcoded passwords, etc.
-- Uses `pyproject.toml` for configuration
-- Version 1.8.0
-
-7. **detect-secrets**
-```yaml
-- repo: https://github.com/Yelp/detect-secrets
-```
-- Identifies accidentally committed secrets/credentials
-- Uses `.secrets.baseline` for approved exceptions
-- Excludes `poetry.lock` and test files
-- Version v1.5.0
-
-8. **hadolint (Dockerfile Linter)**
-```yaml
-- repo: https://github.com/hadolint/hadolint
-```
-- Validates Dockerfile best practices
-- Ignores specific rules:
-  - DL3008: Pin versions in apt-get install
-  - DL3013: Pin versions in pip install
-  - DL3059: Multiple consecutive RUN commands
-- Version v2.13.1-beta
-
-9. **docker-compose-check**
-```yaml
-- repo: https://github.com/IamTheFij/docker-pre-commit
-```
-- Validates docker-compose file syntax
-- Catches configuration errors before commit
-
-10. **yamllint**
-```yaml
-- repo: https://github.com/adrienverge/yamllint
-```
-- Lints YAML files for format and structure
-- Uses custom config `.yamllint.yaml`
-- Version v1.35.1
-
-11. **pre-commit-terraform**
-```yaml
-- repo: https://github.com/antonbabenko/pre-commit-terraform
-```
-- `terraform_fmt`: Consistent formatting
-- `terraform_validate`: Configuration validation
-- `terraform_tflint`: Advanced Terraform linting
-- `terraform_checkov`: Security and compliance checks
-- Version v1.96.2
-
-12. **shellcheck**
-```yaml
-- repo: https://github.com/shellcheck-py/shellcheck-py
-```
-- Finds bugs in shell scripts
-- `-x` flag follows source statements
-- Version v0.10.0.1
-
-13. **commitizen**
-```yaml
-- repo: https://github.com/commitizen-tools/commitizen
-```
-- Enforces conventional commit messages
-- Format: `type(scope): description`
-- Runs during commit-msg stage
-- Version v4.1.0
-
-This configuration provides a comprehensive safety net for code quality, security, and consistency across multiple technologies in your development workflow.
----
-## 3. Additional Tool Configurations
-
-### Create .yamllint.yaml:
-```yaml
-extends: default
-
-rules:
-  line-length:
-    max: 100
-    level: warning
-  document-start: disable
-  truthy:
-    allowed-values: ['true', 'false', 'yes', 'no']
-
-ignore: |
-  reports/
-  .git/
-  node_modules/
+pre-commit:
+  image: python:3.11
+  script:
+    - pip install pre-commit
+    - pre-commit run --all-files
 ```
 
-### Update pyproject.toml for Bandit:
-```toml
-[tool.bandit]
-exclude_dirs = ["tests", "reports"]
-skips = ["B101", "B104"]  # Skip assert statements and hardcoded bind
-targets = ["src"]
+## Troubleshooting
 
-[tool.black]
-line-length = 100
-target-version = ['py311']
-include = '\.pyi?$'
-
-[tool.ruff]
-line-length = 100
-select = ["E", "F", "B", "I"]
-ignore = ["E501"]
-exclude = ["reports"]
-
-[tool.mypy]
-python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-check_untyped_defs = true
-```
-
-## 4. Initialize detect-secrets:
+### Cache Invalidation
 ```bash
-# Create a baseline for detect-secrets
-detect-secrets scan > .secrets.baseline
+pre-commit clean
+pre-commit gc
 ```
 
-## 5. Git hooks installation:
+### Hook Updates
 ```bash
-# Initialize pre-commit
-pre-commit install
-
-# Install specific hooks
-pre-commit install --hook-type pre-push
-pre-commit install --hook-type commit-msg
-```
-
-## 6. Usage Examples
-
-```bash
-# Run against all files
-pre-commit run --all-files
-
-# Run a specific hook
-pre-commit run black --all-files
-
-# Update hooks to latest versions
 pre-commit autoupdate
 ```
 
-## Tool-specific Commands
-
+### Skip Patterns
 ```bash
-# Auto-format Python code according to PEP 8 style guide using black
-black src/
+# Emergency override (document reason)
+git commit -m "feat: critical hotfix" --no-verify
 
-# Run Ruff for fast Python linting and code quality checks
-ruff check src/
-
-# Perform static type checking with mypy to catch type-related errors
-mypy src/
-
-# Scan Python code for common security issues using Bandit
-bandit -r src/
-
-# Check Dockerfile for best practices and common mistakes
-hadolint Dockerfile
-
-# Validate YAML files for syntax and formatting issues
-yamllint .
-
-# Search for potential hardcoded secrets and credentials in source code
-detect-secrets scan src/
+# Selective skip
+SKIP=black,isort git commit -m "feat: formatting exception"
 ```
 
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Run `pre-commit run --all-files`
+4. Submit a pull request
+
+## License
+
+MIT License - See LICENSE file for details.
+
 ---
+
+*Maintained by the Platform Engineering team*

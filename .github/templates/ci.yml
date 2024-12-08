@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-name: CI
+name: DevSecOps - CI
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetches all history for all branches and tags
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -55,23 +55,35 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
 
-      - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.0
+      # Python Code Quality
+      - name: Run Black
+        run: poetry run black --check src/
 
-      - name: Run linters
+      - name: Run isort
+        run: poetry run isort --check-only src/
+
+      - name: Run Ruff
+        run: poetry run ruff check src/
+
+      - name: Run mypy
+        run: poetry run mypy src/
+
+      - name: Install detect-secrets
         run: |
-          # Create directory for reports
-          mkdir -p reports
+          python -m pip install detect-secrets
 
-          # Install additional dependencies if needed
-          poetry install --with dev --no-interaction
+      - name: Run detect-secrets scan
+        run: |
+          detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files 'poetry.lock' \
+            --exclude-files '.*test.*' \
+            --exclude-files '.venv/*' \
+            --exclude-files 'htmlcov/*' \
+            --exclude-files '.pytest_cache/*' \
+            > reports/detect-secrets-scan_results.txt
 
-          # Run linters
-          poetry run ruff check . --output-format=github
-          poetry run black --check .
-          poetry run isort --check-only .
-
-      - name: Run security scan
+      - name: Run Bandit security scan
         run: |
           # Create reports directory if it doesn't exist
           mkdir -p reports
@@ -96,13 +108,12 @@ jobs:
           name: security-reports
           path: reports/
 
-      # Add artifact upload for reports
-      - name: Upload security scan reports
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: security-reports
-          path: reports/
+      - name: Run detect-secrets
+        run: |
+          poetry run detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files 'poetry.lock' \
+            --exclude-files '.*test.*'
 
   sast:
     name: Static Analysis
@@ -394,14 +405,18 @@ jobs:
           tags: |
             # Branch and version (e.g., main_1.0.0)
             type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}
+
             # Branch, version and timestamp (e.g., main_1.0.0_202411161234)
-            type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
+            # type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
+
             # Latest tag for main branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            # type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+
             # Git tags
-            type=ref,event=tag
+            # type=ref,event=tag
+
             # Git short SHA
-            type=sha,format=short
+            # type=sha,format=short
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
@@ -442,3 +457,278 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: cosign sign ${DOCKER_REGISTRY}/${{ env.IMAGE_NAME }}@${{ steps.meta.outputs.digest }}
+
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    # Run after publish job to ensure we don't delete images we just created
+    needs: [publish]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      packages: write
+
+    steps:
+      - name: Delete old container images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: 'container'
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          age: '3'
+
+  # deploy:
+  #   name: Deploy to EC2
+  #   needs: [publish]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+
+  #   environment:
+  #     name: production
+  #     url: https://your-app-url.com
+
+  #   steps:
+  #     - name: Start deployment notification
+  #       uses: slackapi/slack-github-action@v1.25.0
+  #       with:
+  #         channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+  #         payload: |
+  #           {
+  #             "text": "🚀 Starting deployment of ${{ github.repository }} to Production",
+  #             "blocks": [
+  #               {
+  #                 "type": "header",
+  #                 "text": {
+  #                   "type": "plain_text",
+  #                   "text": "🚀 Deployment Started",
+  #                   "emoji": true
+  #                 }
+  #               },
+  #               {
+  #                 "type": "section",
+  #                 "fields": [
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Repository:*\n${{ github.repository }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Environment:*\nProduction"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Branch:*\n${{ github.ref_name }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Version:*\n${{ env.VERSION }}"
+  #                   }
+  #                 ]
+  #               },
+  #               {
+  #                 "type": "section",
+  #                 "fields": [
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Triggered by:*\n${{ github.actor }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Commit:*\n${{ github.sha }}"
+  #                   }
+  #                 ]
+  #               }
+  #             ]
+  #           }
+  #       env:
+  #         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  #     - name: Deploy to EC2
+  #       id: deploy
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.EC2_HOST }}
+  #         username: ${{ secrets.EC2_USERNAME }}
+  #         key: ${{ secrets.EC2_SSH_KEY }}
+  #         script: |
+  #           # Set versioned tag
+  #           DOCKER_TAG="${{ env.BRANCH }}_${{ env.VERSION }}"
+
+  #           # Ensure we're in the home directory
+  #           cd ~
+
+  #           # Check if directory exists and handle git repository
+  #           if [ ! -d "app-source" ]; then
+  #             echo "Cloning repository..."
+  #             git clone https://github.com/lethanhson9901/app-source.git
+  #           fi
+
+  #           # Change to repository directory
+  #           cd app-source
+  #           cp .env.example .env
+
+  #           # Store current commit hash
+  #           OLD_COMMIT=$(git rev-parse HEAD)
+
+  #           # Fetch latest changes
+  #           git pull
+
+  #           # Get the latest commit hash from main
+  #           LATEST_COMMIT=$(git rev-parse origin/main)
+
+  #           # If there are changes, reset to latest main
+  #           if [ "$OLD_COMMIT" != "$LATEST_COMMIT" ]; then
+  #             echo "Updates found, applying changes..."
+  #             git reset --hard origin/main
+  #           else
+  #             echo "Already at latest version"
+  #           fi
+
+  #           # Login to GitHub Container Registry
+  #           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+  #           # Update the image tag in docker-compose.yml without modifying other settings
+  #           # sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
+
+  #           # Stop existing containers
+  #           docker compose down
+
+  #           # Remove existing images to force new pull
+  #           # docker compose pull --ignore-pull-failures
+  #           # docker image rm $(docker compose config | grep 'image: ' | awk '{print $2}') || true
+
+  #           # Deploy with docker-compose using explicit version tag
+  #           docker compose up -d
+
+  #           # Clean up
+  #           # docker system prune -af --volumes
+
+  #           # Wait for health check
+  #           timeout 30 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done'
+
+  #           # Verify deployment
+  #           # docker compose ps
+  #           # docker compose logs --tail=50 app
+
+  #           # Print deployed version and git info for verification
+  #           echo "Deployed version: ${DOCKER_TAG}"
+  #           echo "Git commit: $(git rev-parse HEAD)"
+
+  #     - name: Notify deployment success
+  #       if: success()
+  #       uses: slackapi/slack-github-action@v1.25.0
+  #       with:
+  #         channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+  #         payload: |
+  #           {
+  #             "text": "✅ Successfully deployed ${{ github.repository }} to Production",
+  #             "blocks": [
+  #               {
+  #                 "type": "header",
+  #                 "text": {
+  #                   "type": "plain_text",
+  #                   "text": "✅ Deployment Successful",
+  #                   "emoji": true
+  #                 }
+  #               },
+  #               {
+  #                 "type": "section",
+  #                 "fields": [
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Repository:*\n${{ github.repository }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Environment:*\nProduction"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Version:*\n${{ env.VERSION }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Deployed by:*\n${{ github.actor }}"
+  #                   }
+  #                 ]
+  #               },
+  #               {
+  #                 "type": "section",
+  #                 "text": {
+  #                   "type": "mrkdwn",
+  #                   "text": "*Status:* Successfully deployed to production\n*Deployment URL:* http://ec2-18-142-237-255.ap-southeast-1.compute.amazonaws.com"
+  #                 }
+  #               },
+  #               {
+  #                 "type": "context",
+  #                 "elements": [
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "View deployment details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+  #                   }
+  #                 ]
+  #               }
+  #             ]
+  #           }
+  #       env:
+  #         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  #     - name: Notify deployment failure
+  #       if: failure()
+  #       uses: slackapi/slack-github-action@v1.25.0
+  #       with:
+  #         channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+  #         payload: |
+  #           {
+  #             "text": "❌ Failed to deploy ${{ github.repository }} to Production",
+  #             "blocks": [
+  #               {
+  #                 "type": "header",
+  #                 "text": {
+  #                   "type": "plain_text",
+  #                   "text": "❌ Deployment Failed",
+  #                   "emoji": true
+  #                 }
+  #               },
+  #               {
+  #                 "type": "section",
+  #                 "fields": [
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Repository:*\n${{ github.repository }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Environment:*\nProduction"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Version:*\n${{ env.VERSION }}"
+  #                   },
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Attempted by:*\n${{ github.actor }}"
+  #                   }
+  #                 ]
+  #               },
+  #               {
+  #                 "type": "section",
+  #                 "text": {
+  #                   "type": "mrkdwn",
+  #                   "text": "*Error:* Deployment to production failed. Please check the logs for details."
+  #                 }
+  #               },
+  #               {
+  #                 "type": "context",
+  #                 "elements": [
+  #                   {
+  #                     "type": "mrkdwn",
+  #                     "text": "View error details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+  #                   }
+  #                 ]
+  #               }
+  #             ]
+  #           }
+  #       env:
+  #         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}

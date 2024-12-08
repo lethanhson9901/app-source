@@ -85,6 +85,18 @@ repos:
       '--exclude-files', '.*test.*'
     ]
 
+# Additional secrets scanning with Gitleaks
+- repo: https://github.com/gitleaks/gitleaks
+  rev: v8.18.2
+  hooks:
+  - id: gitleaks
+    args: ['protect', '--staged']
+    exclude: |
+      (?x)^(
+        poetry\.lock|
+        .*test.*
+      )$
+
 # Dockerfile linting
 - repo: https://github.com/hadolint/hadolint
   rev: v2.13.1-beta
@@ -118,13 +130,6 @@ repos:
   - id: terraform_validate
   - id: terraform_tflint
   - id: terraform_checkov
-
-# Shell script checks
-# - repo: https://github.com/shellcheck-py/shellcheck-py
-#   rev: v0.10.0.1
-#   hooks:
-#   - id: shellcheck
-#     args: ['-x']
 
 # Commit message checks
 - repo: https://github.com/commitizen-tools/commitizen
