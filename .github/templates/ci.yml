@@ -461,274 +461,33 @@ jobs:
   cleanup:
     name: Cleanup Old Images
     runs-on: ubuntu-latest
-    # Run after publish job to ensure we don't delete images we just created
     needs: [publish]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       packages: write
 
     steps:
-      - name: Delete old container images
-        uses: actions/delete-package-versions@v4
+      - name: Delete old package versions
+        uses: actions/github-script@v6
         with:
-          package-name: ${{ github.event.repository.name }}
-          package-type: 'container'
-          min-versions-to-keep: 10
-          delete-only-untagged-versions: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          age: '3'
+          script: |
+            const response = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+              package_type: 'container',
+              package_name: context.repo.repo,
+              org: context.repo.owner,
+            });
 
-  # deploy:
-  #   name: Deploy to EC2
-  #   needs: [publish]
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+            for (const version of response.data) {
+              const created = new Date(version.created_at);
+              const daysOld = (new Date() - created) / (1000 * 60 * 60 * 24);
 
-  #   environment:
-  #     name: production
-  #     url: https://your-app-url.com
-
-  #   steps:
-  #     - name: Start deployment notification
-  #       uses: slackapi/slack-github-action@v1.25.0
-  #       with:
-  #         channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-  #         payload: |
-  #           {
-  #             "text": "🚀 Starting deployment of ${{ github.repository }} to Production",
-  #             "blocks": [
-  #               {
-  #                 "type": "header",
-  #                 "text": {
-  #                   "type": "plain_text",
-  #                   "text": "🚀 Deployment Started",
-  #                   "emoji": true
-  #                 }
-  #               },
-  #               {
-  #                 "type": "section",
-  #                 "fields": [
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Repository:*\n${{ github.repository }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Environment:*\nProduction"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Branch:*\n${{ github.ref_name }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Version:*\n${{ env.VERSION }}"
-  #                   }
-  #                 ]
-  #               },
-  #               {
-  #                 "type": "section",
-  #                 "fields": [
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Triggered by:*\n${{ github.actor }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Commit:*\n${{ github.sha }}"
-  #                   }
-  #                 ]
-  #               }
-  #             ]
-  #           }
-  #       env:
-  #         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-
-  #     - name: Deploy to EC2
-  #       id: deploy
-  #       uses: appleboy/ssh-action@master
-  #       with:
-  #         host: ${{ secrets.EC2_HOST }}
-  #         username: ${{ secrets.EC2_USERNAME }}
-  #         key: ${{ secrets.EC2_SSH_KEY }}
-  #         script: |
-  #           # Set versioned tag
-  #           DOCKER_TAG="${{ env.BRANCH }}_${{ env.VERSION }}"
-
-  #           # Ensure we're in the home directory
-  #           cd ~
-
-  #           # Check if directory exists and handle git repository
-  #           if [ ! -d "app-source" ]; then
-  #             echo "Cloning repository..."
-  #             git clone https://github.com/lethanhson9901/app-source.git
-  #           fi
-
-  #           # Change to repository directory
-  #           cd app-source
-  #           cp .env.example .env
-
-  #           # Store current commit hash
-  #           OLD_COMMIT=$(git rev-parse HEAD)
-
-  #           # Fetch latest changes
-  #           git pull
-
-  #           # Get the latest commit hash from main
-  #           LATEST_COMMIT=$(git rev-parse origin/main)
-
-  #           # If there are changes, reset to latest main
-  #           if [ "$OLD_COMMIT" != "$LATEST_COMMIT" ]; then
-  #             echo "Updates found, applying changes..."
-  #             git reset --hard origin/main
-  #           else
-  #             echo "Already at latest version"
-  #           fi
-
-  #           # Login to GitHub Container Registry
-  #           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-  #           # Update the image tag in docker-compose.yml without modifying other settings
-  #           # sed -i "s|image:.*|image: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}:${DOCKER_TAG}|" docker-compose.yml
-
-  #           # Stop existing containers
-  #           docker compose down
-
-  #           # Remove existing images to force new pull
-  #           # docker compose pull --ignore-pull-failures
-  #           # docker image rm $(docker compose config | grep 'image: ' | awk '{print $2}') || true
-
-  #           # Deploy with docker-compose using explicit version tag
-  #           docker compose up -d
-
-  #           # Clean up
-  #           # docker system prune -af --volumes
-
-  #           # Wait for health check
-  #           timeout 30 bash -c 'while ! curl -s http://localhost:8080/health/live; do sleep 5; done'
-
-  #           # Verify deployment
-  #           # docker compose ps
-  #           # docker compose logs --tail=50 app
-
-  #           # Print deployed version and git info for verification
-  #           echo "Deployed version: ${DOCKER_TAG}"
-  #           echo "Git commit: $(git rev-parse HEAD)"
-
-  #     - name: Notify deployment success
-  #       if: success()
-  #       uses: slackapi/slack-github-action@v1.25.0
-  #       with:
-  #         channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-  #         payload: |
-  #           {
-  #             "text": "✅ Successfully deployed ${{ github.repository }} to Production",
-  #             "blocks": [
-  #               {
-  #                 "type": "header",
-  #                 "text": {
-  #                   "type": "plain_text",
-  #                   "text": "✅ Deployment Successful",
-  #                   "emoji": true
-  #                 }
-  #               },
-  #               {
-  #                 "type": "section",
-  #                 "fields": [
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Repository:*\n${{ github.repository }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Environment:*\nProduction"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Version:*\n${{ env.VERSION }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Deployed by:*\n${{ github.actor }}"
-  #                   }
-  #                 ]
-  #               },
-  #               {
-  #                 "type": "section",
-  #                 "text": {
-  #                   "type": "mrkdwn",
-  #                   "text": "*Status:* Successfully deployed to production\n*Deployment URL:* http://ec2-18-142-237-255.ap-southeast-1.compute.amazonaws.com"
-  #                 }
-  #               },
-  #               {
-  #                 "type": "context",
-  #                 "elements": [
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "View deployment details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  #                   }
-  #                 ]
-  #               }
-  #             ]
-  #           }
-  #       env:
-  #         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-
-  #     - name: Notify deployment failure
-  #       if: failure()
-  #       uses: slackapi/slack-github-action@v1.25.0
-  #       with:
-  #         channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-  #         payload: |
-  #           {
-  #             "text": "❌ Failed to deploy ${{ github.repository }} to Production",
-  #             "blocks": [
-  #               {
-  #                 "type": "header",
-  #                 "text": {
-  #                   "type": "plain_text",
-  #                   "text": "❌ Deployment Failed",
-  #                   "emoji": true
-  #                 }
-  #               },
-  #               {
-  #                 "type": "section",
-  #                 "fields": [
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Repository:*\n${{ github.repository }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Environment:*\nProduction"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Version:*\n${{ env.VERSION }}"
-  #                   },
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "*Attempted by:*\n${{ github.actor }}"
-  #                   }
-  #                 ]
-  #               },
-  #               {
-  #                 "type": "section",
-  #                 "text": {
-  #                   "type": "mrkdwn",
-  #                   "text": "*Error:* Deployment to production failed. Please check the logs for details."
-  #                 }
-  #               },
-  #               {
-  #                 "type": "context",
-  #                 "elements": [
-  #                   {
-  #                     "type": "mrkdwn",
-  #                     "text": "View error details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  #                   }
-  #                 ]
-  #               }
-  #             ]
-  #           }
-  #       env:
-  #         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+              if (daysOld > 3) {
+                await github.rest.packages.deletePackageVersionForOrg({
+                  package_type: 'container',
+                  package_name: context.repo.repo,
+                  org: context.repo.owner,
+                  package_version_id: version.id
+                });
+                console.log(`Deleted version ${version.id} (${version.name})`);
+              }
+            }

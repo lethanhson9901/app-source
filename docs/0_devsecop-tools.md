@@ -25,12 +25,6 @@ This repo include a comprehensive collection of free and open-source tools that 
 - Monitoring and observability solutions
 - Policy enforcement tools to ensure security compliance
 
-The document also includes practical examples showing:
-- How to set up pre-commit hooks
-- How to integrate security checks in Jenkins pipelines
-- How to implement Kubernetes security policies
-- How to write basic security policies using Open Policy Agent (OPA)
-
 ![alt text](overview.png)
 
 # DevSecOps Tools Reference Table
