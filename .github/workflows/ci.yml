@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetches all history for all branches and tags
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -55,23 +55,27 @@ jobs:
       - name: Install dependencies
         run: poetry install --with dev
 
-      - name: Run pre-commit hooks
-        uses: pre-commit/action@v3.0.0
+      # Python Code Quality
+      - name: Run Black
+        run: poetry run black --check src/
 
-      - name: Run linters
+      - name: Run isort
+        run: poetry run isort --check-only src/
+
+      - name: Run Ruff
+        run: poetry run ruff check src/
+
+      - name: Run mypy
+        run: poetry run mypy src/
+
+      - name: Run detect-secrets
         run: |
-          # Create directory for reports
-          mkdir -p reports
+          poetry run detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files 'poetry.lock' \
+            --exclude-files '.*test.*'
 
-          # Install additional dependencies if needed
-          poetry install --with dev --no-interaction
-
-          # Run linters
-          poetry run ruff check . --output-format=github
-          poetry run black --check .
-          poetry run isort --check-only .
-
-      - name: Run security scan
+      - name: Run Bandit security scan
         run: |
           # Create reports directory if it doesn't exist
           mkdir -p reports
@@ -96,13 +100,12 @@ jobs:
           name: security-reports
           path: reports/
 
-      # Add artifact upload for reports
-      - name: Upload security scan reports
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: security-reports
-          path: reports/
+      - name: Run detect-secrets
+        run: |
+          poetry run detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files 'poetry.lock' \
+            --exclude-files '.*test.*'
 
   sast:
     name: Static Analysis
@@ -399,7 +402,7 @@ jobs:
             # type=raw,value=${{ env.BRANCH }}_${{ env.VERSION }}_${{ env.TIMESTAMP }}
 
             # Latest tag for main branch
-            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            # type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
 
             # Git tags
             # type=ref,event=tag

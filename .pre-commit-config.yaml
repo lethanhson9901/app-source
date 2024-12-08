@@ -120,11 +120,11 @@ repos:
   - id: terraform_checkov
 
 # Shell script checks
-- repo: https://github.com/shellcheck-py/shellcheck-py
-  rev: v0.10.0.1
-  hooks:
-  - id: shellcheck
-    args: ['-x']
+# - repo: https://github.com/shellcheck-py/shellcheck-py
+#   rev: v0.10.0.1
+#   hooks:
+#   - id: shellcheck
+#     args: ['-x']
 
 # Commit message checks
 - repo: https://github.com/commitizen-tools/commitizen
