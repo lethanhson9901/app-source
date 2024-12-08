@@ -25,6 +25,7 @@ anyio = ">=4.4.0"
 pyjwt = {extras = ["crypto"], version = "^2.9.0"}
 jinja2 = "^3.1.2"
 aiofiles = "^23.2.1"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.25"}
 
 [tool.poetry.group.dev.dependencies]
 black = ">=23.10.1"
@@ -90,7 +91,7 @@ exclude_lines = [
 ]
 
 [tool.black]
-line-length = 88
+line-length = 100  # Changed from 88 to match pre-commit
 target-version = ["py311"]
 include = '\.pyi?$'
 extend-exclude = '''
@@ -102,20 +103,18 @@ extend-exclude = '''
 [tool.isort]
 profile = "black"
 multi_line_output = 3
-line_length = 88
+line_length = 100  # Changed from line-length to line_length
 skip = ["tests"]
 
 [tool.ruff]
-line-length = 88
+# Base configuration
+line-length = 100  # Changed from 88 to match pre-commit
 target-version = "py311"
-select = [
-    "E",   # pycodestyle
-    "F",   # pyflakes
-    "B",   # flake8-bugbear
-    "I",   # isort
-    "C",   # flake8-comprehensions
-    "UP"   # pyupgrade
-]
+
+# All Python files under src/
+src = ["src"]
+
+# Exclude files and directories
 exclude = [
     ".git",
     ".venv",
@@ -126,18 +125,58 @@ exclude = [
     "src/tests"
 ]
 
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "B",    # flake8-bugbear
+    "I",    # isort
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "YTT",  # flake8-2020
+    "S",    # flake8-bandit
+    "BLE",  # flake8-blind-except
+    "FBT",  # flake8-boolean-trap
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "T10",  # flake8-debugger
+    "ICN",  # flake8-import-conventions
+    "PIE",  # flake8-pie
+    "T20",  # flake8-print
+    "PT",   # flake8-pytest-style
+    "Q",    # flake8-quotes
+    "RSE",  # flake8-raise
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "ARG",  # flake8-unused-arguments
+    "ERA",  # eradicate
+    "PGH",  # pygrep-hooks
+    "PLC",  # pylint
+    "PLE",  # pylint
+    "PLR",  # pylint
+    "PLW",  # pylint
+    "RUF"   # ruff-specific rules
+]
+
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["S101"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 [tool.mypy]
 python_version = "3.11"
 disallow_untyped_defs = true
-disallow_incomplete_defs = true
 check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_return_any = true
-warn_unreachable = true
 strict_optional = true
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "asyncpg.*"

@@ -1,37 +1,31 @@
 from collections.abc import AsyncGenerator
-from typing import cast
+from typing import Any
 
 import redis.asyncio as redis
-
-# Use Any for asyncpg types since there are no stubs
-from asyncpg import connect
-from asyncpg.connection import Connection
+from asyncpg import Connection as AsyncPGConnection
 from redis.asyncio.client import Redis
 
 from .config import Settings, settings
 
-# Type ignore for asyncpg imports since they lack stubs
-Connection = Connection  # type: ignore
 
-
-async def get_db() -> AsyncGenerator[Connection, None]:
+async def get_db() -> AsyncGenerator[AsyncPGConnection, None]:
     """
     Create and yield a database connection.
 
     Returns:
-        AsyncGenerator[Connection, None]: Database connection
+        AsyncGenerator[AsyncPGConnection, None]: Database connection
 
     Raises:
         asyncpg.exceptions.PostgresError: If connection fails
     """
-    conn: Connection = await connect(settings.DATABASE_URL)
+    conn = await AsyncPGConnection.connect(settings.DATABASE_URL)
     try:
         yield conn
     finally:
         await conn.close()
 
 
-async def get_redis() -> AsyncGenerator[Redis, None]:
+async def get_redis() -> AsyncGenerator[Redis[Any], None]:
     """
     Create and yield a Redis connection.
 
@@ -41,7 +35,10 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
     Raises:
         redis.exceptions.RedisError: If connection fails
     """
-    redis_client: Redis = cast(Redis, redis.from_url(settings.REDIS_URL))
+    if settings.REDIS_URL is None:
+        raise ValueError("REDIS_URL must be set")
+
+    redis_client = redis.from_url(settings.REDIS_URL)
     try:
         yield redis_client
     finally:

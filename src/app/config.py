@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, cast
 
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 def find_env_file() -> str:
@@ -26,14 +29,18 @@ def get_default_host() -> str:
     """
     Determine the default host based on environment.
 
+    For container/production use, override with APP_HOST environment variable.
+    Returns localhost by default for security.
+
     Returns:
         str: The appropriate host binding
     """
-    env = os.getenv("APP_ENVIRONMENT", "development")
-    # Only bind to all interfaces in container/production environment
-    if env in ["production", "container"]:
-        return "0.0.0.0"  # nosec B104 # Required for production/container environment
-    return "127.0.0.1"  # Default to localhost for security
+    # Allow explicit override through environment variable
+    if host := os.getenv("APP_HOST"):
+        return host
+
+    # Default to localhost for maximum security
+    return "127.0.0.1"
 
 
 class Settings(BaseSettings):
@@ -42,7 +49,8 @@ class Settings(BaseSettings):
     IMAGE_NAME: str = "app-source"
     BRANCH: str = "main"
     BUILD_VERSION: str = "1.0.0"
-    DOCKER_REGISTRY: str = "ghcr.io"
+
+    # Removed duplicate DOCKER_REGISTRY definition
 
     #######################################
     # Core Application Settings
@@ -101,7 +109,7 @@ class Settings(BaseSettings):
     #######################################
     # Docker Configuration
     #######################################
-    DOCKER_REGISTRY: str = "local"
+    DOCKER_REGISTRY: str = "local"  # Single definition
     DOCKER_IMAGE_TAG: str = "latest"
     DOCKER_BUILD_VERSION: str = "latest"
 
@@ -152,9 +160,7 @@ class Settings(BaseSettings):
         extra = "allow"  # Allow extra fields from env file
 
         @classmethod
-        def parse_env_var(
-            cls, field_name: str, raw_val: str
-        ) -> list[str] | bool | str:  # Changed from Union
+        def parse_env_var(cls, field_name: str, raw_val: str) -> list[str] | bool | str:
             """
             Parse environment variables with special handling for certain fields.
 
@@ -227,5 +233,8 @@ settings = Settings()
 
 if __name__ == "__main__":
     env_file_path = Settings.Config.env_file
-    print(f"\nUsing .env file: {env_file_path}")
-    print(f"File exists: {os.path.exists(env_file_path)}")
+    logger.info(
+        "Environment configuration - File: %s, Exists: %s",
+        env_file_path,
+        os.path.exists(env_file_path),
+    )

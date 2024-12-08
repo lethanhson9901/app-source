@@ -1,6 +1,7 @@
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from opentelemetry import trace
@@ -16,9 +17,7 @@ templates = Jinja2Templates(directory="src/app/templates")
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(
-        title=settings.APP_NAME, version=settings.APP_VERSION, debug=settings.APP_DEBUG
-    )
+    app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION, debug=settings.APP_DEBUG)
 
     app.add_middleware(
         CORSMiddleware,
@@ -38,10 +37,8 @@ def create_app() -> FastAPI:
     FastAPIInstrumentor.instrument_app(app)
 
     @app.get("/")
-    async def root(request: Request):
-        return templates.TemplateResponse(
-            "index.html", {"request": request, "settings": settings}
-        )
+    async def root(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse("index.html", {"request": request, "settings": settings})
 
     return app
 

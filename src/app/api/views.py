@@ -9,57 +9,72 @@ logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/api/v1")
 api_key_header = APIKeyHeader(name="X-API-Key")
 
-# In-memory storage
-items_db = []
-current_id = 0
+
+class ItemsRepository:
+    def __init__(self) -> None:
+        self._items: list[Item] = []
+        self._current_id: int = 0
+
+    def add_item(self, item: Item) -> Item:
+        self._current_id += 1
+        item.id = self._current_id
+        self._items.append(item)
+        return item
+
+    def get_items(self, skip: int = 0, limit: int = 10) -> list[Item]:
+        return self._items[skip : skip + limit]
+
+    def update_item(self, item_id: int, updated_item: Item) -> Item | None:
+        for idx, existing_item in enumerate(self._items):
+            if existing_item.id == item_id:
+                updated_item.id = item_id
+                self._items[idx] = updated_item
+                return updated_item
+        return None
+
+    def delete_item(self, item_id: int) -> bool:
+        for idx, item in enumerate(self._items):
+            if item.id == item_id:
+                self._items.pop(idx)
+                return True
+        return False
 
 
-@router.post("/items", response_model=Item)
-async def create_item(item: Item, api_key: str = Depends(api_key_header)):
+# Create a single instance of the repository
+items_repo = ItemsRepository()
+
+
+def verify_api_key(api_key: str = Depends(api_key_header)) -> str:
     if api_key != settings.API_KEY:
         logger.error("invalid_api_key", key=api_key)
         raise HTTPException(status_code=403, detail="Invalid API key")
+    return api_key
 
-    global current_id
-    current_id += 1
-    item.id = current_id
-    items_db.append(item)
-    return item
+
+@router.post("/items", response_model=Item)
+async def create_item(item: Item, _: str = Depends(verify_api_key)) -> Item:
+    return items_repo.add_item(item)
 
 
 @router.get("/items", response_model=list[Item])
 async def get_items(
-    api_key: str = Depends(api_key_header),
     skip: int = 0,
     limit: int = 10,
-):
-    if api_key != settings.API_KEY:
-        logger.error("invalid_api_key", key=api_key)
-        raise HTTPException(status_code=403, detail="Invalid API key")
-
-    return items_db[skip : skip + limit]
+    _: str = Depends(verify_api_key),
+) -> list[Item]:
+    return items_repo.get_items(skip, limit)
 
 
 @router.put("/items/{item_id}", response_model=Item)
-async def update_item(item_id: int, item: Item, api_key: str = Depends(api_key_header)):
-    if api_key != settings.API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
-
-    for idx, existing_item in enumerate(items_db):
-        if existing_item.id == item_id:
-            item.id = item_id
-            items_db[idx] = item
-            return item
-    raise HTTPException(status_code=404, detail="Item not found")
+async def update_item(item_id: int, item: Item, _: str = Depends(verify_api_key)) -> Item:
+    updated_item = items_repo.update_item(item_id, item)
+    if not updated_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return updated_item
 
 
 @router.delete("/items/{item_id}")
-async def delete_item(item_id: int, api_key: str = Depends(api_key_header)):
-    if api_key != settings.API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
-
-    for idx, item in enumerate(items_db):
-        if item.id == item_id:
-            items_db.pop(idx)
-            return {"message": "Item deleted successfully"}
-    raise HTTPException(status_code=404, detail="Item not found")
+async def delete_item(item_id: int, _: str = Depends(verify_api_key)) -> dict[str, str]:
+    if not items_repo.delete_item(item_id):
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"message": "Item deleted successfully"}

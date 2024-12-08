@@ -1,8 +1,9 @@
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import structlog
 from fastapi import Request
+from fastapi.responses import Response
 from prometheus_client import Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -16,25 +17,30 @@ request_duration = Histogram(
 
 
 class MetricsMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         start_time = time.time()
         response = await call_next(request)
         duration = time.time() - start_time
 
-        request_duration.labels(
-            method=request.method, endpoint=request.url.path
-        ).observe(duration)
+        request_duration.labels(method=request.method, endpoint=request.url.path).observe(duration)
 
         return response
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        # Safely get client IP, defaulting to None if not available
+        client_ip = request.client.host if request.client else None
+
         logger.info(
             "request_started",
             method=request.method,
             path=request.url.path,
-            client_ip=request.client.host,
+            client_ip=client_ip,
         )
 
         try:
