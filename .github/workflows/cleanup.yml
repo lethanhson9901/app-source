@@ -18,20 +18,20 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const response = await github.rest.packages.getAllPackageVersions({
+            const response = await github.rest.packages.listPackageVersionsForPackageOwnedByAuthenticatedUser({
               package_type: 'container',
               package_name: context.repo.repo,
               owner: context.repo.owner
             });
 
             for (const version of response.data) {
-              // Delete versions with SHA tags (failed CI images)
-              if (version.metadata.container.tags.some(tag => tag.startsWith('sha256:'))) {
+              // Check if version has SHA tags
+              const tags = version.metadata?.container?.tags || [];
+              if (tags.some(tag => tag.startsWith('sha256:'))) {
                 try {
-                  await github.rest.packages.deletePackageVersion({
+                  await github.rest.packages.deletePackageVersionForAuthenticatedUser({
                     package_type: 'container',
                     package_name: context.repo.repo,
-                    owner: context.repo.owner,
                     package_version_id: version.id
                   });
                   console.log(`Deleted failed CI image version ${version.id}`);
