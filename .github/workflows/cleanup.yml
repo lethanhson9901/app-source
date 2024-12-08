@@ -1,0 +1,24 @@
+name: Cleanup Old Images
+
+on:
+  workflow_dispatch:  # Allows manual trigger
+  push:
+    branches:
+      - '*'
+
+jobs:
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Delete old container images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: 'container'
+          min-versions-to-keep: 5
+          delete-only-untagged-versions: false  # Delete both tagged and untagged images
+          token: ${{ secrets.GITHUB_TOKEN }}
