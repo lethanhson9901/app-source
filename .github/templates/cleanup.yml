@@ -1,11 +1,15 @@
-name: Test Cleanup Container Images
+name: Cleanup Container Images
 
 on:
-  workflow_dispatch:  # Manual trigger only for testing
+  workflow_dispatch:  # Allows manual trigger
+  push:
+    branches:
+      - '*'
 
 jobs:
-  cleanup-test:
-    name: Test Container Cleanup
+  cleanup:
+    name: Cleanup Container Images
+    needs: [publish]
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -22,43 +26,32 @@ jobs:
       - name: Get package versions
         id: get-versions
         run: |
-          echo "Listing current package versions..."
-          gh api \
+          VERSIONS=$(gh api \
             -H "Accept: application/vnd.github+json" \
             /user/packages/container/app-source/versions \
-            --jq '.[].metadata.container.tags'
+            --jq '[.[] | select(.metadata.container.tags | length == 0) | .id] | join(",")')
+          echo "package_versions=$VERSIONS" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Delete untagged versions safely
       - name: Delete untagged versions
         uses: actions/delete-package-versions@v4
-        continue-on-error: true
+        continue-on-error: true  # Continue even if some versions can't be deleted
         with:
           package-name: 'app-source'
           package-type: 'container'
           token: ${{ secrets.GITHUB_TOKEN }}
-          delete-only-untagged-versions: true
+          delete-only-untagged-versions: true  # Only delete versions without tags
           min-versions-to-keep: 0
 
       # Keep only recent tagged versions
       - name: Clean up old tagged versions
         uses: actions/delete-package-versions@v4
-        continue-on-error: true
+        continue-on-error: true  # Continue even if some versions can't be deleted
         with:
           package-name: 'app-source'
           package-type: 'container'
           token: ${{ secrets.GITHUB_TOKEN }}
-          min-versions-to-keep: 5
-          delete-only-untagged-versions: false
-
-      # List remaining versions
-      - name: List remaining versions
-        run: |
-          echo "Listing remaining package versions..."
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            /user/packages/container/app-source/versions \
-            --jq '.[].metadata.container.tags'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          min-versions-to-keep: 5  # Keep the 5 most recent versions
+          delete-only-untagged-versions: false  # Include tagged versions
