@@ -68,12 +68,20 @@ jobs:
       - name: Run mypy
         run: poetry run mypy src/
 
-      - name: Run detect-secrets
+      - name: Install detect-secrets
         run: |
-          poetry run detect-secrets scan \
+          python -m pip install detect-secrets
+
+      - name: Run detect-secrets scan
+        run: |
+          detect-secrets scan \
             --baseline .secrets.baseline \
             --exclude-files 'poetry.lock' \
-            --exclude-files '.*test.*'
+            --exclude-files '.*test.*' \
+            --exclude-files '.venv/*' \
+            --exclude-files 'htmlcov/*' \
+            --exclude-files '.pytest_cache/*' \
+            > reports/detect-secrets-scan_results.txt
 
       - name: Run Bandit security scan
         run: |
