@@ -459,6 +459,8 @@ jobs:
         run: cosign sign ${DOCKER_REGISTRY}/${{ env.IMAGE_NAME }}@${{ steps.meta.outputs.digest }}
 
   cleanup:
+    name: Cleanup Container Images
+    needs: [publish]  # This ensures cleanup runs after successful publish
     runs-on: ubuntu-latest
     permissions:
       packages: write
