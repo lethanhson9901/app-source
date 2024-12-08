@@ -1,11 +1,10 @@
 name: Cleanup Container Images
 
 on:
-  workflow_run:
-    workflows: ['CI']  # Replace 'CI' with your actual CI workflow name
-    types:
-      - completed
-  workflow_dispatch:    # Keep manual trigger for convenience
+  workflow_dispatch:  # Allows manual trigger
+  push:
+    branches:
+      - '*'
 
 jobs:
   cleanup:
